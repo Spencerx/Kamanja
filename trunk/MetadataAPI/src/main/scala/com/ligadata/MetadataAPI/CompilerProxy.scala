@@ -923,6 +923,10 @@ class CompilerProxy{
    *  buildClassPath 
    */
   private def buildClassPath(inDeps: List[String], inMC: List[String], cpDeps: List[String] = null):(String,Set[BaseElemDef],scala.collection.immutable.Set[String],scala.collection.immutable.Set[String]) = {
+
+    inDeps.foreach { x => println("Dep-> "+x) }
+    cpDeps.foreach { x => println("CP-> "+x) }
+    
     var depElems: Set[BaseElemDef] = Set[BaseElemDef]()
     var totalDeps: Set[String] = Set[String]()
     var classPathDeps: Set[String] = Set[String]()
@@ -934,8 +938,8 @@ class CompilerProxy{
     var combinedDeps: scala.collection.immutable.Set[String] = scala.collection.immutable.Set[String]()
     var nonTypeDeps: scala.collection.immutable.Set[String] = scala.collection.immutable.Set[String]()
     if (cpDeps != null) {
-      combinedDeps = inDeps.toSet[String] ++ cpDeps.toSet[String]
-      nonTypeDeps = inDeps.toSet[String] ++ cpDeps.toSet[String]
+      combinedDeps = inDeps.toSet[String] //++ cpDeps.toSet[String]
+      nonTypeDeps = inDeps.toSet[String] //++ cpDeps.toSet[String]
     }
 
     var msgContDepSet: Set[String] = Set[String]()
@@ -949,7 +953,6 @@ class CompilerProxy{
           logger.warn("Unknown dependency "+dep)
         else {
           depElems += elem
-          logger.warn("Resolved dependency "+dep+ " to "+ elem.jarName)
           msgContDepSet = msgContDepSet + elem.jarName
         }
       })
@@ -961,11 +964,12 @@ class CompilerProxy{
     if (inDeps != null) {
       var depJars = inDeps.map(j => JarPathsUtils.GetValidJarFile(jarPaths, j)).mkString(":")
       if (depJars != null && depJars.length > 0) depJars = depJars + ":" + msgJars else depJars = msgJars
-      if (classPath != null && classPath.size > 0) {
-        classPath = classPath + ":" + depJars
-      } else {
-        classPath = depJars
-      }
+      classPath = depJars
+   //   if (classPath != null && classPath.size > 0) {
+   //     classPath = classPath + ":" + depJars
+   //   } else {
+   //     classPath = depJars
+   //   }
     }
     println("COMPILER_PROXY: List of all the dependencies needed to compile this model")
     println("==========================================")
