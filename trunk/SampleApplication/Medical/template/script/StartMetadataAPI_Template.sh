@@ -3,8 +3,8 @@
 ipport="8998"
 
 if [ "$1" != "debug" ]; then
-	java -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/input/application-2-Healthcare/metadata/config/MetadataAPIConfig.properties
+	java -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/input/COPD-RiskAssessment/metadata/config/MetadataAPIConfig.properties
 else	
-	java -Xdebug -Xrunjdwp:transport=dt_socket,address="$ipport",server=y -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/input/application-2-Healthcare/metadata/config/MetadataAPIConfig.properties
+	java -Xdebug -Xrunjdwp:transport=dt_socket,address="$ipport",server=y -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/input/COPD-RiskAssessment/metadata/config/MetadataAPIConfig.properties
 fi
 

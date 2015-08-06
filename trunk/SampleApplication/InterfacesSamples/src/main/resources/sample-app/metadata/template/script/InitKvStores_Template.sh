@@ -1,0 +1,3 @@
+java -jar {InstallDirectory}/bin/KVInit-1.0 --kvname System.GlobalPreferences  --config {InstallDirectory}/config/Engine1Config.properties --csvpath {InstallDirectory}/input/LowBalance/data/GlobalPreferences.dat  --keyfieldname PrefType
+java -jar {InstallDirectory}/bin/KVInit-1.0 --kvname System.CustPreferences    --config {InstallDirectory}/config/Engine1Config.properties --csvpath {InstallDirectory}/input/LowBalance/data/CustPreferences.dat    --keyfieldname custId
+java -jar {InstallDirectory}/bin/KVInit-1.0 --kvname System.CustomerInfo       --config {InstallDirectory}/config/Engine1Config.properties --csvpath {InstallDirectory}/input/LowBalance/data/CustomerInfo.dat       --keyfieldname custId

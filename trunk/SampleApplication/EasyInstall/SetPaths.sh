@@ -36,16 +36,24 @@ sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_h
 sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/template/script/ClusterMetadata_Cassandra_Template.sh > $install_dir/bin/ClusterMetadata_Cassandra.sh
 sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/template/script/StartEngine_Template.sh > $install_dir/bin/StartEngine.sh
 
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/script/InitKvStores_Template.sh > $install_dir/input/application-2-Healthcare/bin/InitKvStores.sh
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/script/StartMetadataAPI_Template.sh > $install_dir/input/application-2-Healthcare/bin/ApplicationMetadata.sh
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/script/StartMetadataAPI_Cassandra_Template.sh > $install_dir/input/application-2-Healthcare/bin/ApplicationMetadata_Cassandra.sh
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/script/StartRestService_Template.sh > $install_dir/input/application-2-Healthcare/bin/RestService.sh
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/script/PushSampleDataToKafka_Template.sh > $install_dir/input/application-2-Healthcare/bin/PushSampleDataToKafka.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/script/InitKvStores_Template.sh > $install_dir/input/COPD-RiskAssessment/bin/InitKvStores.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/script/StartMetadataAPI_Template.sh > $install_dir/input/COPD-RiskAssessment/bin/ApplicationMetadata.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/script/StartMetadataAPI_Cassandra_Template.sh > $install_dir/input/COPD-RiskAssessment/bin/ApplicationMetadata_Cassandra.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/script/StartRestService_Template.sh > $install_dir/input/COPD-RiskAssessment/bin/RestService.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/script/PushSampleDataToKafka_Template.sh > $install_dir/input/COPD-RiskAssessment/bin/PushSampleDataToKafka.sh
 
-# application-1-HelloWorld
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-1-HelloWorld/template/script/StartMetadataAPI_Template.sh > $install_dir/input/application-1-HelloWorld/bin/ApplicationMetadata.sh
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-1-HelloWorld/template/script/PushSampleDataToKafka_Template.sh > $install_dir/input/application-1-HelloWorld/bin/PushSampleDataToKafka.sh
-# application-1-HelloWorld
+#LowBalance
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/script/InitKvStores_Template.sh > $install_dir/input/LowBalance/bin/InitKvStores.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/script/StartMetadataAPI_Template.sh > $install_dir/input/LowBalance/bin/ApplicationMetadata.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/script/StartMetadataAPI_Cassandra_Template.sh > $install_dir/input/LowBalance/bin/ApplicationMetadata_Cassandra.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/script/StartRestService_Template.sh > $install_dir/input/LowBalance/bin/RestService.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/script/PushSampleDataToKafka_Template.sh > $install_dir/input/LowBalance/bin/PushSampleDataToKafka.sh
+#LowBalance
+
+# HelloWorld
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/HelloWorld/template/script/StartMetadataAPI_Template.sh > $install_dir/input/HelloWorld/bin/ApplicationMetadata.sh
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/HelloWorld/template/script/PushSampleDataToKafka_Template.sh > $install_dir/input/HelloWorld/bin/PushSampleDataToKafka.sh
+# HelloWorld
 
 
 # changing path in config files
@@ -55,13 +63,18 @@ sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_h
 sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/template/config/EngineConfig_Template.properties > $install_dir/config/Engine1Config.properties
 sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/template/config/EngineConfig_Cassandra_Template.properties > $install_dir/config/Engine1Config_Cassandra.properties
 
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/config/MetadataAPIConfig_Template.properties > $install_dir/input/application-2-Healthcare/metadata/config/MetadataAPIConfig.properties
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-2-Healthcare/template/config/MetadataAPIConfig_Cassandra_Template.properties > $install_dir/input/application-2-Healthcare/metadata/config/MetadataAPIConfig_Cassandra.properties
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/config/MetadataAPIConfig_Template.properties > $install_dir/input/COPD-RiskAssessment/metadata/config/MetadataAPIConfig.properties
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/COPD-RiskAssessment/template/config/MetadataAPIConfig_Cassandra_Template.properties > $install_dir/input/COPD-RiskAssessment/metadata/config/MetadataAPIConfig_Cassandra.properties
 
-# application-1-HelloWorld
-sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/application-1-HelloWorld/template/config/MetadataAPIConfig_Template.properties > $install_dir/input/application-1-HelloWorld/metadata/config/MetadataAPIConfig.properties
+#LowBalance
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/config/MetadataAPIConfig_Template.properties > $install_dir/input/LowBalance/metadata/config/MetadataAPIConfig.properties
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/LowBalance/template/config/MetadataAPIConfig_Cassandra_Template.properties > $install_dir/input/LowBalance/metadata/config/MetadataAPIConfig_Cassandra.properties
+#LowBalance
 
-# application-1-HelloWorld
+# HelloWorld
+sed "s/{InstallDirectory}/$install_dir_repl/g;s/{ScalaInstallDirectory}/$scala_home_repl/g;s/{JavaInstallDirectory}/$java_home_repl/g" $install_dir/input/HelloWorld/template/config/MetadataAPIConfig_Template.properties > $install_dir/input/HelloWorld/metadata/config/MetadataAPIConfig.properties
+
+# HelloWorld
 
 # Expecting 1st Parameter as Kafka Install directory
 if [ "$#" -ne 1 ] || ! [ -d "$KafkaRootDir" ]; then
