@@ -5667,7 +5667,6 @@ object MetadataAPIImpl extends MetadataAPI {
   }
   
   def getUP (ci: String, key: String): String = {
-     println(" YO WILLIE... GO PATRIOTS...  key = "+key+ " for clusterid  "+ci)
      MdMgr.GetMdMgr.GetUserProperty(ci,key)
   }
 

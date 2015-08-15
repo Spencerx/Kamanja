@@ -1379,12 +1379,6 @@ object TestMetadataAPI {
   def AddModelSourceJava {
     try {
       
-      
-      println("GETTING WilliamTest" + MetadataAPIImpl.getUP("ligadata1", "WilliamTest"))
-      println("GETTING MagicWord" + MetadataAPIImpl.getUP("ligadata1", "MagicWord"))
-      println("GETTING Password" + MetadataAPIImpl.getUP("ligadata1", "Password"))
-
-      
       var dirName = MetadataAPIImpl.GetMetadataAPIConfig.getProperty("MODEL_FILES_DIR")
       if (dirName == null) {
         dirName = MetadataAPIImpl.GetMetadataAPIConfig.getProperty("GIT_ROOT") + "/Kamanja/trunk/MetadataAPI/src/test/SampleTestFiles/Models"
