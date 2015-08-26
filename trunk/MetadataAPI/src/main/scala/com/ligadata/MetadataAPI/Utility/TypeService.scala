@@ -52,8 +52,13 @@ object TypeService {
     } else {
       //input provided
       var message = new File(input.toString)
-      val typeDef = Source.fromFile(message).mkString
-      response = MetadataAPIImpl.AddTypes(typeDef.toString, "JSON", userid)
+      if(message.exists()){
+        val typeDef = Source.fromFile(message).mkString
+        response = MetadataAPIImpl.AddTypes(typeDef.toString, "JSON", userid)
+      }else{
+      response="Type definition file does not exist"
+      }
+
     }
     response
   }

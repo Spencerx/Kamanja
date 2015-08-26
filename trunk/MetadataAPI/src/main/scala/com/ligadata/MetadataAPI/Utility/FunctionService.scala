@@ -50,8 +50,13 @@ object FunctionService {
     } else {
       //input provided
       var function = new File(input.toString)
-      val functionDef = Source.fromFile(function).mkString
-      response = MetadataAPIImpl.AddFunctions(functionDef.toString, "JSON", userid)
+      if(function.exists()){
+        val functionDef = Source.fromFile(function).mkString
+        response = MetadataAPIImpl.AddFunctions(functionDef.toString, "JSON", userid)
+      }else{
+      response="Function definition file does not exist"
+      }
+
     }
     response
   }
@@ -167,8 +172,14 @@ object FunctionService {
     } else {
       //input provided
       var function = new File(input.toString)
-      val functionDef = Source.fromFile(function).mkString
-      response = MetadataAPIImpl.UpdateFunctions(functionDef.toString, "JSON", userid)
+      if(function.exists()){
+        val functionDef = Source.fromFile(function).mkString
+        response = MetadataAPIImpl.UpdateFunctions(functionDef.toString, "JSON", userid)
+
+      }else{
+        response="Function definition file does not exist"
+
+      }
     }
     response
   }

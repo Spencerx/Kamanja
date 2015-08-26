@@ -50,8 +50,13 @@ object ConfigService {
    } else {
      //input provided
      var message = new File(input.toString)
-     val configDef = Source.fromFile(message).mkString
-     response = MetadataAPIImpl.UploadConfig(configDef.toString, userid, "configuration")
+     if(message.exists()){
+       val configDef = Source.fromFile(message).mkString
+       response = MetadataAPIImpl.UploadConfig(configDef.toString, userid, "configuration")
+     }else{
+       response="Model config file does not exist"
+     }
+
    }
    response
  }
@@ -92,8 +97,12 @@ object ConfigService {
     } else {
       //input provided
       var message = new File(input.toString)
-      val configDef = Source.fromFile(message).mkString
-      response = MetadataAPIImpl.UploadModelsConfig(configDef.toString, userid, "configuration")
+      if(message.exists()){
+        val configDef = Source.fromFile(message).mkString
+        response = MetadataAPIImpl.UploadModelsConfig(configDef.toString, userid, "configuration")
+      }else{
+        response="Model config file does not exist"
+      }
     }
     response
   }

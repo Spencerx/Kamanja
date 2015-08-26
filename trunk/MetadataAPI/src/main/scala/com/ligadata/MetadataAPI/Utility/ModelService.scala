@@ -54,8 +54,12 @@ object ModelService {
       //   println("Path provided. Added msg")
       //process message
       var model = new File(input.toString)
-      modelDef= Source.fromFile(model).mkString
-      response = MetadataAPIImpl.AddModel(modelDef.toString, userid)
+      if(model.exists()){
+        modelDef= Source.fromFile(model).mkString
+        response = MetadataAPIImpl.AddModel(modelDef.toString, userid)
+      }else{
+        response="Model definition file does not exist."
+      }
     }
     response
   }
@@ -98,9 +102,12 @@ object ModelService {
       //   println("Path provided. Added msg")
       //process message
       var model = new File(input.toString)
-      modelDef= Source.fromFile(model).mkString
-      response = MetadataAPIImpl.UpdateModel(modelDef, userid)
-      //println("Response: " + response)
+      if(model.exists()){
+        modelDef= Source.fromFile(model).mkString
+        response = MetadataAPIImpl.UpdateModel(modelDef, userid)
+      }else{
+        response="Model definition file does not exist."
+      }
     }
     response
   }

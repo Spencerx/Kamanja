@@ -96,8 +96,12 @@ object ContainerService {
     } else {
       //input provided
       var container = new File(input.toString)
-      val containerDef = Source.fromFile(container).mkString
-      response = MetadataAPIImpl.AddContainer(containerDef, "JSON", userid)
+      if(container.exists()){
+        val containerDef = Source.fromFile(container).mkString
+        response = MetadataAPIImpl.AddContainer(containerDef, "JSON", userid)
+      }else{
+        response = "Input container file does not exist"
+      }
     }
     //Got the container.
     response

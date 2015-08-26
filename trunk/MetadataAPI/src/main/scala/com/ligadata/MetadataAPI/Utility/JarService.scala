@@ -48,8 +48,12 @@ def uploadJar(input: String): String ={
   } else {
     //input provided
     var message = new File(input.toString)
-    val jarDef = Source.fromFile(message).mkString
-    response =MetadataAPIImpl.UploadJar(jarDef.toString)
+    if(message.exists()){
+      val jarDef = Source.fromFile(message).mkString
+      response =MetadataAPIImpl.UploadJar(jarDef.toString)
+    }else{
+      response="Jar location is invalid"
+    }
   }
   response
 }
