@@ -1,5 +1,5 @@
 #!/bin/sh
-
+INPUT=$@
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
   DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
@@ -10,8 +10,10 @@ SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 KAMANJA_HOME="$(dirname "$SCRIPT_DIR")"
 export KAMANJA_HOME=$KAMANJA_HOME
+ACTION1=$(echo $INPUT | cut -d" " -f1)
+ACTION2=$(echo $INPUT | cut -d" " -f2)
+ACTION3=$(echo $INPUT | cut -d" " -f3)
 jar_full_path=$(which jar)
-INPUT=$@
 if [ "$?" != "0" ]; then
 	echo "Not found java home directory."
 	exit 1
@@ -38,7 +40,7 @@ if [ "$#" -eq 0  ]; then
     exit 0
 fi
 #if config provided, update or add to the config file
-if [ "${array[0] }" = "edit" ]; then
+if [ "${INPUT[0]}" = "edit" ]; then
   #check if key present in file. If not add to the file. Else update it.
   while read line
   do
@@ -51,7 +53,7 @@ if [ "${array[0] }" = "edit" ]; then
     echo $line >> ~/MetadataAPIConfig.temp
   fi
   done < ~/MetadataAPIConfig.properties
-  echo "${array[2]}=${array[3]}" >> ~/MetadataAPIConfig.temp
+  echo "${INPUT[2]}=${INPUT[3]}" >> ~/MetadataAPIConfig.temp
   mv ~/MetadataAPIConfig.temp ~/MetadataAPIConfig.properties
   echo "MetadataAPIConfig.properties update complete!"
   exit 0
@@ -83,19 +85,15 @@ elif [ "$INPUT" = "stop" ]; then
     else
         echo "Kamanja successfully stopped"
     fi
-elif [ "$INPUT" = "create queues" ]; then
-  $KAMANJA_HOME/bin/CreateQueues.sh
-elif [ "$INPUT" = "watch status queue" ]; then
-  $KAMANJA_HOME/bin/WatchStatusQueue.sh
-elif [ "$INPUT" = "watch input queue" ]; then
-  $KAMANJA_HOME/bin/WatchInputQueue.sh
-elif [ "$INPUT" = "watch output queue" ]; then
-  $KAMANJA_HOME/bin/WatchOutputQueue.sh
+elif [ "$ACTION1 $ACTION2" = "create topic" ]; then
+  $KAMANJA_HOME/bin/CreateTopic.sh "$ACTION3"
+elif [ "$ACTION1 $ACTION2" = "watch topic" ]; then
+  $KAMANJA_HOME/bin/WatchTopic.sh "$ACTION3"
 elif [ "$INPUT" = "help" ]; then
 cat $KAMANJA_HOME/input/HelpMenu.txt
     echo ""
-elif [ "$INPUT" = "push data" ]; then
-    $KAMANJA_HOME/bin/PushSampleDataToKafka.sh $INPUT
+elif [ "$ACTION1 $ACTION2" = "push data" ]; then
+    $KAMANJA_HOME/bin/PushSampleDataToKafka.sh "$ACTION3"
 #elif [ "$INPUT" = "kvinit" ]; then
 #count=0
 #FILEDIR=$KAMANJA_HOME/input/SampleApplications/bin
