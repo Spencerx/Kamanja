@@ -8,6 +8,8 @@ import scala.io.Source
 
 import org.apache.log4j._
 
+import com.ligadata.kamanja.metadata.Utils
+
 /**
  * Created by dhaval on 8/7/15.
  */
@@ -342,12 +344,17 @@ object ModelService {
           //println(errormsg)
           response=errormsg
         }
+        //TODO
         val modelKey = modelKeys(choice - 1)
-        val modelKeyTokens = modelKey.split("\\.")
-        val modelNameSpace = modelKeyTokens(0)
-        val modelName = modelKeyTokens(1)
-        val modelVersion = modelKeyTokens(2)
-        val apiResult = MetadataAPIImpl.RemoveModel(modelNameSpace, modelName, modelVersion.toLong, userid).toString
+    val modelInfo  =    Utils.parseNameToken(modelKey)
+        /*        println("object name space: "+modelInfo._1)
+                val modelKey = modelKeys(choice - 1)
+                val modelKeyTokens = modelKey.split("\\.")
+                val modelNameSpace = modelKeyTokens(0)
+                val modelName = modelKeyTokens(1)
+                val modelVersion = modelKeyTokens(2)*/
+
+        val apiResult = MetadataAPIImpl.RemoveModel(modelInfo._1, modelInfo._2, modelInfo._3.toInt, userid).toString
         response=apiResult
       }
 
