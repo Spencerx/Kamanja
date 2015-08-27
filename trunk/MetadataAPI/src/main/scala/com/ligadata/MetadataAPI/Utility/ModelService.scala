@@ -317,47 +317,43 @@ object ModelService {
     response
   }
 
-  def removeModel: String ={
+  def removeModel(input: String): String ={
     var response=""
+    var modelKey=""
     try {
       //  logger.setLevel(Level.TRACE); //check again
+      if (input == ""){
+        val modelKeys = MetadataAPIImpl.GetAllModelsFromCache(true, None)
 
-      val modelKeys = MetadataAPIImpl.GetAllModelsFromCache(true, None)
-
-      if (modelKeys.length == 0) {
-        val errorMsg="Sorry, No models available, in the Metadata, to delete!"
-        //println(errorMsg)
-        response=errorMsg
-      }
-      else{
-        println("\nPick the model to be deleted from the following list: ")
-        var srno = 0
-        for(modelKey <- modelKeys){
-          srno+=1
-          println("["+srno+"] "+modelKey)
+        if (modelKeys.length == 0) {
+          val errorMsg="Sorry, No models available, in the Metadata, to delete!"
+          //println(errorMsg)
+          response=errorMsg
         }
-        println("Enter your choice: ")
-        val choice: Int = readInt()
+        else {
+          println("\nPick the model to be deleted from the following list: ")
+          var srno = 0
+          for (modelKey <- modelKeys) {
+            srno += 1
+            println("[" + srno + "] " + modelKey)
+          }
+          println("Enter your choice: ")
+          val choice: Int = readInt()
 
-        if (choice < 1 || choice > modelKeys.length) {
-          val errormsg="Invalid choice " + choice + ". Start with the main menu."
-          //println(errormsg)
-          response=errormsg
+          if (choice < 1 || choice > modelKeys.length) {
+            val errormsg = "Invalid choice " + choice + ". Start with the main menu."
+            //println(errormsg)
+            response = errormsg
+          }
+          //TODO
+          modelKey = modelKeys(choice - 1)
         }
-        //TODO
-        val modelKey = modelKeys(choice - 1)
-    val modelInfo  =    Utils.parseNameToken(modelKey)
-        /*        println("object name space: "+modelInfo._1)
-                val modelKey = modelKeys(choice - 1)
-                val modelKeyTokens = modelKey.split("\\.")
-                val modelNameSpace = modelKeyTokens(0)
-                val modelName = modelKeyTokens(1)
-                val modelVersion = modelKeyTokens(2)*/
-
+      }else{
+        modelKey=input
+        }
+      val modelInfo  =    Utils.parseNameToken(modelKey)
         val apiResult = MetadataAPIImpl.RemoveModel(modelInfo._1, modelInfo._2, modelInfo._3.toInt, userid).toString
         response=apiResult
-      }
-
     } catch {
       case e: Exception => {
         //e.printStackTrace

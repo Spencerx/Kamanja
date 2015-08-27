@@ -81,7 +81,7 @@ object StartMetadataAPI {
         case Action.ADDMODELPMMML => response = ModelService.addModelPmml(input)
         case Action.ADDMODELSCALA => response = ModelService.addModelScala(input)
         case Action.ADDMODELJAVA => response = ModelService.addModelJava(input)
-        case Action.REMOVEMODEL => response = ModelService.removeModel
+        case Action.REMOVEMODEL => response = ModelService.removeModel(input)
         case Action.ACTIVATEMODEL => response = ModelService.activateModel
         case Action.DEACTIVATEMODEL => response = ModelService.deactivateModel
         case Action.UPDATEMODEL => response = ModelService.updateModel(input)
