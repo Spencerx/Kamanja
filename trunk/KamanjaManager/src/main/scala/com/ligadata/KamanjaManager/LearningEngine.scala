@@ -35,6 +35,7 @@ import com.ligadata.Exceptions.StackTrace
 
 class LearningEngine(val input: InputAdapter, val curPartitionKey: PartitionUniqueRecordKey) {
   val LOG = Logger.getLogger(getClass);
+  var cntr: Long = 0
 
   private def RunAllModels(transId: Long, inputData: Array[Byte], finalTopMsgOrContainer: MessageContainerBase, envContext: EnvContext, uk: String, uv: String, xformedMsgCntr: Int, totalXformedMsgs: Int): Array[SavedMdlResult] = {
     var results: ArrayBuffer[SavedMdlResult] = new ArrayBuffer[SavedMdlResult]()
@@ -88,10 +89,11 @@ class LearningEngine(val input: InputAdapter, val curPartitionKey: PartitionUniq
     (topMsgInfo.parents(0)._1, true, topMsgInfo)
   }
 
-  def execute(transId: Long, inputData: Array[Byte], msgType: String, msgInfo: MsgContainerObjAndTransformInfo, inputdata: InputData, envContext: EnvContext, readTmNs: Long, rdTmMs: Long, uk: String, uv: String, xformedMsgCntr: Int, totalXformedMsgs: Int, ignoreOutput: Boolean): Array[(String, String)] = {
+  // Returns Adapter/Queue Name, Partition Key & Output String
+  def execute(transId: Long, inputData: Array[Byte], msgType: String, msgInfo: MsgContainerObjAndTransformInfo, inputdata: InputData, envContext: EnvContext, readTmNs: Long, rdTmMs: Long, uk: String, uv: String, xformedMsgCntr: Int, totalXformedMsgs: Int, ignoreOutput: Boolean, allOutputQueueNames: Array[String]): Array[(String, String, String)] = {
     // LOG.debug("LE => " + msgData)
     LOG.debug("Processing uniqueKey:%s, uniqueVal:%s".format(uk, uv))
-    val returnOutput = ArrayBuffer[(String, String)]() // Adapter/Queue name & output message 
+    val returnOutput = ArrayBuffer[(String, String, String)]() // Adapter/Queue name, PartitionKey & output message 
 
     try {
       if (msgInfo != null && inputdata != null) {
@@ -149,19 +151,18 @@ class LearningEngine(val input: InputAdapter, val curPartitionKey: PartitionUniq
             resMap(res.mdlName) = res.mdlRes.asKeyValuesMap.map(r => { (r._1, r._2) }).toArray
           })
 
-          var resStr = "Not found any output."
           val outputMsgs = KamanjaMetadata.getMdMgr.OutputMessages(true, true)
           if (outputMsgs != None && outputMsgs != null && outputMsgs.get.size > 0) {
             LOG.info("msg " + msg.FullName)
             LOG.info(" outputMsgs.size" + outputMsgs.get.size)
             var outputGen = new OutputMsgGenerator()
             val resultedoutput = outputGen.generateOutputMsg(msg, resMap, outputMsgs.get.toArray)
-            resStr = resultedoutput.map(resout => resout._3).mkString("\n")
+            returnOutput ++= resultedoutput.map(resout => (resout._1, resout._2.mkString(","), resout._3))
           } else {
             val json = ("ModelsResult" -> results.toList.map(res => res.toJson))
-            resStr = compact(render(json))
+            returnOutput ++= allOutputQueueNames.map(adapNm => (adapNm, cntr.toString, compact(render(json)))) // Sending the same result to all queues
+            cntr += 1
           }
-          returnOutput += (("", resStr))
 
           if (isValidPartitionKey) {
             envContext.saveModelsResult(transId, partKeyDataList, allMdlsResults)
@@ -177,6 +178,6 @@ class LearningEngine(val input: InputAdapter, val curPartitionKey: PartitionUniq
         LOG.error("Failed to create and run message. Reason:%s Message:%s\nStackTrace:%s".format(e.getCause, e.getMessage, stackTrace))
       }
     }
-    return Array[(String, String)]()
+    return Array[(String, String, String)]()
   }
 }

@@ -82,8 +82,16 @@ trait OutputAdapterObj {
 trait OutputAdapter {
   val inputConfig: AdapterConfiguration // Configuration
 
-  def send(message: String, partKey: String): Unit
-  def send(message: Array[Byte], partKey: Array[Byte]): Unit
+  def send(message: String, partKey: String): Unit = send(Array(message.getBytes("UTF8")), Array(partKey.getBytes("UTF8")))
+
+  def send(message: Array[Byte], partKey: Array[Byte]): Unit = send(Array(message), Array(partKey))
+
+  // To send an array of messages. messages.size should be same as partKeys.size
+  def send(messages: Array[String], partKeys: Array[String]): Unit = send(messages.map(m => m.getBytes("UTF8")), partKeys.map(k => k.getBytes("UTF8")))
+  
+  // To send an array of messages. messages.size should be same as partKeys.size
+  def send(messages: Array[Array[Byte]], partKeys: Array[Array[Byte]]): Unit
+  
   def Shutdown: Unit
   def Category = "Output"
 }

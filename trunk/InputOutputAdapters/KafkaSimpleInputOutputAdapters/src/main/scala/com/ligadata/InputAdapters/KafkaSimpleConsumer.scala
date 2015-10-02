@@ -90,6 +90,7 @@ class KafkaSimpleConsumer(val inputConfig: AdapterConfiguration, val callerCtxt:
    */
   def StartProcessing(partitionIds: Array[StartProcPartInfo], ignoreFirstMsg: Boolean): Unit = lock.synchronized {
 
+    LOG.warn("START_PROCESSING CALLED")
     // Check to see if this already started
     if (startTime > 0) {
       LOG.error("KAFKA-ADAPTER: already started, or in the process of shutting down")
@@ -145,6 +146,7 @@ class KafkaSimpleConsumer(val inputConfig: AdapterConfiguration, val callerCtxt:
 
     // Schedule a task to perform a read from a give partition.
     kvs.foreach(kvsElement => {
+
       readExecutor.execute(new Runnable() {
         override def run() {
           val partitionId = kvsElement._1
@@ -258,6 +260,7 @@ class KafkaSimpleConsumer(val inputConfig: AdapterConfiguration, val callerCtxt:
                 Thread.sleep(qc.noDataSleepTimeInMs)
               }
               messagesProcessed = 0
+
             } catch {
               case e: java.lang.InterruptedException =>
                 {

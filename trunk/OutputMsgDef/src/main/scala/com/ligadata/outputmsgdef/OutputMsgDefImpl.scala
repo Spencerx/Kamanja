@@ -62,13 +62,13 @@ object OutputMsgDefImpl {
       log.debug("Version " + outputMessageDef.Version)
       log.debug("Queue" + outputMessageDef.Queue)
       log.debug("OutputFormat " + outputMessageDef.OutputFormat)
-      outputMessageDef.DataDeclaration.foreach(f =>  log.debug("f " + f))
-      outputMessageDef.Defaults.foreach(f =>  log.debug("f " + f))
+      outputMessageDef.DataDeclaration.foreach(f => log.debug("f " + f))
+      outputMessageDef.Defaults.foreach(f => log.debug("f " + f))
 
       val outputQ = outputMessageDef.Queue.toLowerCase()
       val paritionKeys = outputMessageDef.PartitionKey
       val dataDeclaration = outputMessageDef.DataDeclaration
-      val outputFormat = outputMessageDef.OutputFormat.toLowerCase()
+      val outputFormat = outputMessageDef.OutputFormat
       val defaults = outputMessageDef.Defaults
       val name = outputMessageDef.Name.toLowerCase()
       val nameSpace = outputMessageDef.NameSpace.toLowerCase()
@@ -109,6 +109,7 @@ object OutputMsgDefImpl {
       if (paritionKeys != null && paritionKeys.size > 0) {
         paritionKeys.foreach(partionkey => {
           val (fullname, fieldsInfo, typeOf, fullpartionkey) = getFieldsInfo(partionkey)
+          log.debug("fullname:%s, fieldsInfo:%s, typeOf:%s, fullpartionkey:%s".format(fullname, fieldsInfo.mkString("~~"), typeOf, fullpartionkey))
           partionFieldKeys = partionFieldKeys :+ (fullname, fieldsInfo.toArray, typeOf, fullpartionkey)
           var defaultValue: String = null
           if (dfaults.contains(partionkey)) {
@@ -117,11 +118,13 @@ object OutputMsgDefImpl {
           var fldInfo: Array[(String, String)] = fieldsInfo.asInstanceOf[Array[(String, String)]]
           var value: Array[(String, String)] = Array[(String, String)]()
           value = fldInfo
-          if (Fields.contains((fullname, typeOf)))
+          if (Fields.contains((fullname, typeOf))) {
+            log.debug("1-fullname:%s, typeOf:%s".format(fullname, typeOf))
             Fields((fullname, typeOf)) += ((value, defaultValue))
-          else {
+          } else {
             var valueVal: scala.collection.mutable.Set[(Array[(String, String)], String)] = scala.collection.mutable.Set[(Array[(String, String)], String)]()
             valueVal += ((fldInfo, defaultValue))
+            log.debug("2-fullname:%s, typeOf:%s".format(fullname, typeOf))
             Fields((fullname, typeOf)) = (valueVal)
           }
 
@@ -148,11 +151,13 @@ object OutputMsgDefImpl {
           var fldInfo: Array[(String, String)] = fieldsInfo.asInstanceOf[Array[(String, String)]]
           var value: Array[(String, String)] = Array[(String, String)]()
           value = fldInfo
-          if (Fields.contains((fullname, typeOf)))
+          if (Fields.contains((fullname, typeOf))) {
+            log.debug("3-fullname:%s, typeOf:%s".format(fullname, typeOf))
             Fields((fullname, typeOf)) += ((value, defaultValue))
-          else {
+          } else {
             var valueVal: scala.collection.mutable.Set[(Array[(String, String)], String)] = scala.collection.mutable.Set[(Array[(String, String)], String)]()
             valueVal += ((fldInfo, defaultValue))
+            log.debug("4-fullname:%s, typeOf:%s".format(fullname, typeOf))
             Fields((fullname, typeOf)) = (valueVal)
           }
         })
@@ -167,7 +172,7 @@ object OutputMsgDefImpl {
       }
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.trace("Error " + e.getMessage()+"\nStackTrace:"+stackTrace)
+        log.trace("Error " + e.getMessage() + "\nStackTrace:" + stackTrace)
         throw e
       }
     }
@@ -177,7 +182,7 @@ object OutputMsgDefImpl {
   private def extractOutputFormat(outputformat: String): Array[String] = {
     val extractor = """\$\{([^}]+)\}""".r
     val finds = extractor.findAllIn(outputformat)
-    val allOutputFnds = finds.toArray
+    val allOutputFnds = finds.map(fld => fld.toLowerCase()).toArray
     allOutputFnds
   }
 
@@ -196,38 +201,66 @@ object OutputMsgDefImpl {
       val partionKeyParts = fullpartionkey.split("\\.")
       if (partionKeyParts.size < 3)
         throw new Exception("Please provide the fiels in format of Namespace.Name.fieldname")
-      
-      val(namespace, name, field) = com.ligadata.kamanja.metadata.Utils.parseNameToken(fullpartionkey)
-      val (containerDef, messageDef, modelDef) = getModelMsgContainer(namespace, name)
+
+      var namespaceWords = 1
+      var foundFullName = false
+
+      var containerDef: ContainerDef = null
+      var messageDef: MessageDef = null
+      var modelDef: ModelDef = null
+
+      while (foundFullName == false && (namespaceWords + 1) < partionKeyParts.size) {
+        val tmpNamespace = partionKeyParts.take(namespaceWords).mkString(".")
+        val tmpName = partionKeyParts(namespaceWords)
+        val (tmpContainerDef, tmpMessageDef, tmpModelDef) = getModelMsgContainer(tmpNamespace, tmpName)
+        if (tmpContainerDef != null || tmpMessageDef != null || tmpModelDef != null) {
+          containerDef = tmpContainerDef
+          messageDef = tmpMessageDef
+          modelDef = tmpModelDef
+          foundFullName = true
+        } else {
+          namespaceWords += 1
+        }
+      }
+
+      if (containerDef == null && messageDef == null && modelDef == null) {
+        throw new ObjectNolongerExistsException(s"Either Model or Message or Container do not exists in Metadata for $fullpartionkey given in output Message definition.")
+      }
+
+      val namespace = partionKeyParts.take(namespaceWords).mkString(".")
+      val name = partionKeyParts(namespaceWords)
+
       val (childs, typeOf) = getModelMsgContainerChilds(containerDef, messageDef, modelDef)
       typeof = typeOf
-      for (i <- 2 until partionKeyParts.size) {
-        val fld = partionKeyParts(i).toString().toLowerCase()
+      log.debug("namespace:%s, name:%s, typeof:%s, namespaceWords:%d".format(namespace, name, typeof, namespaceWords))
 
-        if (i == 2) {
+      for (i <- (namespaceWords + 1) until partionKeyParts.size) {
+        if (i == (namespaceWords + 1)) {
+          val fld = partionKeyParts(i).toString().toLowerCase()
           val fldType = getFieldTypeFromMsgCtr(childs, fld)
           fieldsInfo += ((fld, fldType))
 
-        } else if (i > 2) {
+        } else if (i > (namespaceWords + 1)) {
           fieldsInfo.foreach(f => log.info("====fieldInfos========" + f._1 + "======" + f._2))
-          val parent = fieldsInfo(i - 3)
+          val parent = fieldsInfo(i - (namespaceWords + 1 + 1))
           val parentType = parent._2.toLowerCase()
           val fieldName = partionKeyParts(i).toString().toLowerCase()
           val fieldType = getFieldType(fieldName, parentType)
           fieldsInfo += ((fieldName, fieldType))
         }
-
       }
       fullname = namespace + "." + name
+      log.debug("fullname:%s".format(fullname))
 
     } catch {
       case e: ObjectNolongerExistsException => {
-        log.error(s"Either Model or Message or Container do not exists in Metadata. Error: "+ e.getMessage)
+        log.error(s"Either Model or Message or Container do not exists in Metadata. Error: " + e.getMessage)
         throw e
       }
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.trace("Error " + e.getMessage()+"\nStackTrace:"+stackTrace)
+        log.error("Error " + e.getMessage() + "\nStackTrace:" + stackTrace)
+        throw e
       }
     }
     (fullname, fieldsInfo.toArray, typeof, fullpartionkey.toLowerCase())
@@ -248,12 +281,12 @@ object OutputMsgDefImpl {
       })
     } catch {
       case e: ObjectNolongerExistsException => {
-        log.error(s"Either Model or Message or Container do not exists in Metadata. Error: "+ e.getMessage)
+        log.error(s"Either Model or Message or Container do not exists in Metadata. Error: " + e.getMessage)
         throw e
       }
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.trace("Error " + e.getMessage()+"\nStackTrace:"+stackTrace)
+        log.trace("Error " + e.getMessage() + "\nStackTrace:" + stackTrace)
       }
     }
     fldtype.toLowerCase()
@@ -297,7 +330,7 @@ object OutputMsgDefImpl {
       }
     } catch {
       case e: ObjectNolongerExistsException => {
-        log.error(s"Either Model or Message or Container do not exists in Metadata. Error: "+ e.getMessage)
+        log.error(s"Either Model or Message or Container do not exists in Metadata. Error: " + e.getMessage)
         throw e
       }
       case e: Exception => {
@@ -314,7 +347,7 @@ object OutputMsgDefImpl {
     var modelObj: ModelDef = null
     var prevVerMsgObjstr: String = ""
     var childs: ArrayBuffer[(String, String)] = ArrayBuffer[(String, String)]()
-    
+
     if (namespace == null || namespace.trim() == "")
       throw new Exception("Proper Namespace do not exists in message/container definition")
     if (name == null || name.trim() == "")
@@ -348,10 +381,6 @@ object OutputMsgDefImpl {
         modelObj = m.asInstanceOf[ModelDef]
     }
 
-    if (msgdefObj == null && cntainerObj == null && modelObj == null) {
-      throw new ObjectNolongerExistsException(s"Either Model or Message or Container do not exists in Metadata for $namespace.$name given in output Message definition.")
-    }
-
     (cntainerObj, msgdefObj, modelObj)
 
   }
@@ -365,16 +394,16 @@ object OutputMsgDefImpl {
 
     try {
       if (container != null) {
-        val fixed = container.containerType.asInstanceOf[StructTypeDef].IsFixed
+        val isFixed = container.containerType.asInstanceOf[ContainerTypeDef].IsFixed
 
-        if (fixed) {
+        if (isFixed) {
           val memberDefs = container.containerType.asInstanceOf[StructTypeDef].memberDefs
           if (memberDefs != null) {
             log.info("==== fixedcontainer")
             childs ++= memberDefs.filter(a => (a.isInstanceOf[AttributeDef])).map(a => (a.Name, a))
           }
           typeOf = "fixedcontainer"
-        } else if (!fixed) {
+        } else { // Mapped
           val attrMap = container.containerType.asInstanceOf[MappedMsgTypeDef].attrMap
           if (attrMap != null) {
             childs ++= attrMap.filter(a => (a._2.isInstanceOf[AttributeDef])).map(a => (a._2.Name, a._2))
@@ -383,16 +412,16 @@ object OutputMsgDefImpl {
           log.info(typeOf)
         }
       } else if (message != null) {
-        val fixed = message.containerType.asInstanceOf[StructTypeDef].IsFixed
+        val isFixed = message.containerType.asInstanceOf[ContainerTypeDef].IsFixed
 
-        if (fixed) {
+        if (isFixed) {
           val memberDefs = message.containerType.asInstanceOf[StructTypeDef].memberDefs
           if (memberDefs != null) {
             childs ++= memberDefs.filter(a => (a.isInstanceOf[AttributeDef])).map(a => (a.Name, a))
           }
           typeOf = "fixedmessage"
           log.info(typeOf)
-        } else if (!fixed) {
+        } else {
           val attrMap = message.containerType.asInstanceOf[MappedMsgTypeDef].attrMap
           if (attrMap != null) {
             childs ++= attrMap.filter(a => (a._2.isInstanceOf[AttributeDef])).map(a => (a._2.Name, a._2))
@@ -409,7 +438,7 @@ object OutputMsgDefImpl {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.debug("Error " + e.getMessage()+"\nStackTrace:"+stackTrace)
+        log.debug("Error " + e.getMessage() + "\nStackTrace:" + stackTrace)
         throw e
       }
     }

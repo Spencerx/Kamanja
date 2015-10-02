@@ -17,9 +17,19 @@
 
 package com.ligadata.KamanjaBase
 
+object DataDelimiters {
+  def IsEmptyDelimiter(delimiterStr: String): Boolean = {
+    (delimiterStr == null || delimiterStr.size == 0)
+  }
+}
+
 class DataDelimiters {
   var keyAndValueDelimiter: String = _
   var fieldDelimiter: String = _
   var valueDelimiter: String = _
+
+  def IsKeyAndValueDelimiterEmpty = DataDelimiters.IsEmptyDelimiter(keyAndValueDelimiter)
+  def IsFieldDelimiterEmpty = DataDelimiters.IsEmptyDelimiter(fieldDelimiter)
+  def IsValueDelimiterEmpty = DataDelimiters.IsEmptyDelimiter(valueDelimiter)
 }
 

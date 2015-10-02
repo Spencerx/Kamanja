@@ -88,6 +88,16 @@ class ConstantMsgObjVarGenerator {
     		mapOriginal.foreach(kv => { map(kv._1.toLowerCase()) = kv._2 })
 
     		return primaryKeys.map(key => map.getOrElse(key, "").toString)
+    	}  else if (inputdata.isInstanceOf[KvData]) {
+    		val kvData = inputdata.asInstanceOf[KvData]
+    		if (kvData == null) {
+    			return prmryKeyPos.map(pos => "")
+    		}
+    		val map: scala.collection.mutable.Map[String, Any] = scala.collection.mutable.Map[String, Any]()
+    		kvData.dataMap.foreach(kv => { map(kv._1.toLowerCase()) = kv._2 })
+
+    		return primaryKeys.map(key => map.getOrElse(key, "").toString)
+
     	} else if (inputdata.isInstanceOf[XmlData]) {
     		val xmlData = inputdata.asInstanceOf[XmlData]
                     // Fix this
@@ -128,7 +138,15 @@ class ConstantMsgObjVarGenerator {
     		val map: scala.collection.mutable.Map[String, Any] = scala.collection.mutable.Map[String, Any]()
     		mapOriginal.foreach(kv => { map(kv._1.toLowerCase()) = kv._2 })
     		return partitionKeys.map(key => map.getOrElse(key, "").toString)
-    	} else if (inputdata.isInstanceOf[XmlData]) {
+    	} else if (inputdata.isInstanceOf[KvData]) {
+    		val kvData = inputdata.asInstanceOf[KvData]
+    		if (kvData == null) {
+    			return partKeyPos.map(pos => "")
+    		}
+    		val map: scala.collection.mutable.Map[String, Any] = scala.collection.mutable.Map[String, Any]()
+    		kvData.dataMap.foreach(kv => { map(kv._1.toLowerCase()) = kv._2 })
+    		return partitionKeys.map(key => map.getOrElse(key, "").toString)
+    	}else if (inputdata.isInstanceOf[XmlData]) {
     		val xmlData = inputdata.asInstanceOf[XmlData]
                     // Fix this
     	} else throw new Exception("Invalid input data")

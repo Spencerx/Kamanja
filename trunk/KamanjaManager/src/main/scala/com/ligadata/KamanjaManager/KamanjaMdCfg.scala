@@ -429,10 +429,6 @@ object KamanjaMdCfg {
 
   private def LoadOutputAdapsForCfg(adaps: scala.collection.mutable.Map[String, AdapterInfo], outputAdapters: ArrayBuffer[OutputAdapter], hasInputAdapterName: Boolean): Boolean = {
     // ConfigurationName
-    if (adaps.size > 1) {
-      LOG.error(" Got %d ouput adapters, but we are expecting only one output adapter.".format(adaps.size))
-      return false
-    }
     adaps.foreach(ac => {
       //BUGBUG:: Not yet validating required fields 
       val conf = new AdapterConfiguration

@@ -87,7 +87,7 @@ echo $bin
 echo "clean, package and assemble $srcPath ..."
 
 cd $srcPath
-sbt clean package KamanjaManager/assembly MetadataAPI/assembly KVInit/assembly MethodExtractor/assembly SimpleKafkaProducer/assembly NodeInfoExtract/assembly ExtractData/assembly MetadataAPIService/assembly JdbcDataCollector/assembly
+sbt clean package KamanjaManager/assembly MetadataAPI/assembly KVInit/assembly MethodExtractor/assembly SimpleKafkaProducer/assembly NodeInfoExtract/assembly ExtractData/assembly MetadataAPIService/assembly JdbcDataCollector/assembly FileDataConsumer/assembly
 
 # recreate eclipse projects
 #echo "refresh the eclipse projects ..."
@@ -107,6 +107,7 @@ cp Utils/ExtractData/target/scala-2.10/ExtractData* $bin
 cp Utils/NodeInfoExtract/target/scala-2.10/NodeInfoExtract* $bin
 cp Utils/JdbcDataCollector/target/scala-2.10/JdbcDataCollector* $bin
 cp MetadataAPIService/target/scala-2.10/MetadataAPIService* $bin
+cp FileDataConsumer/target/scala-2.10/FileDataConsumer* $bin
 
 # *******************************
 # Copy jars required (more than required if the fat jars are used)

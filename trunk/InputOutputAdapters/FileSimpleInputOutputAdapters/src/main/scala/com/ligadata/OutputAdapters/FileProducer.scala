@@ -59,15 +59,22 @@ class FileProducer(val inputConfig: AdapterConfiguration, cntrAdapter: CountersA
     throw new Exception("Not yet handled other than text & GZ files")
   }
 
-  override def send(message: String, partKey: String): Unit = send(message.getBytes("UTF8"), partKey.getBytes("UTF8"))
-
   // Locking before we write into file
-  override def send(message: Array[Byte], partKey: Array[Byte]): Unit = _lock.synchronized {
+  // To send an array of messages. messages.size should be same as partKeys.size
+  override def send(messages: Array[Array[Byte]], partKeys: Array[Array[Byte]]): Unit = _lock.synchronized {
+    if (messages.size != partKeys.size) {
+      LOG.error("Message and Partition Keys hould has same number of elements. Message has %d and Partition Keys has %d".format(messages.size, partKeys.size))
+      return
+    }
+    if (messages.size == 0) return
     try {
-      os.write(message);
-      os.write(newLine)
+      // Op is not atomic
+      messages.foreach(message => {
+        os.write(message);
+        os.write(newLine)
+      })
       val key = Category + "/" + fc.Name + "/evtCnt"
-      cntrAdapter.addCntr(key, 1)
+      cntrAdapter.addCntr(key, messages.size) // for now adding rows
     } catch {
       case e: Exception => {
         LOG.error("Failed to send :" + e.getMessage)

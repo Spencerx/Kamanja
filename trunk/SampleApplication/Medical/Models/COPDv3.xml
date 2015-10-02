@@ -22,7 +22,7 @@ COPDv3.xml
 <PMML xmlns="http://www.dmg.org/PMML-4_1" version="4.1">
 
 	<Header copyright="Medco Corp. Copyright 2014" description="COPD Risk Assessment">
-		<Application name="COPDRiskAssessmentNmSpc" version="00.01.00"/>
+		<Application name="com.medco.pmml.COPDRiskAssessmentNmSpc" version="00.01.00"/>
 	</Header>
 
 	<DataDictionary numberOfFields="8">

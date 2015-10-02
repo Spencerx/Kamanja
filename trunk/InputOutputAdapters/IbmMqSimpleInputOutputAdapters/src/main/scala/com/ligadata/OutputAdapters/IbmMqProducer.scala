@@ -92,36 +92,42 @@ class IbmMqProducer(val inputConfig: AdapterConfiguration, cntrAdapter: Counters
     case jmsex: Exception => {
       printFailure(jmsex)
       val stackTrace = StackTrace.ThrowableTraceString(jmsex)
-      LOG.debug("StackTrace:"+stackTrace)}
+      LOG.debug("StackTrace:" + stackTrace)
+    }
   }
 
-  override def send(message: String, partKey: String): Unit = {
+  // To send an array of messages. messages.size should be same as partKeys.size
+  override def send(messages: Array[Array[Byte]], partKeys: Array[Array[Byte]]): Unit = {
+    if (messages.size != partKeys.size) {
+      LOG.error("Message and Partition Keys hould has same number of elements. Message has %d and Partition Keys has %d".format(messages.size, partKeys.size))
+      return
+    }
+    if (messages.size == 0) return
+
     try {
-      // Do we need text Message or Bytes Message?
-      if (qc.msgType == com.ligadata.AdaptersConfiguration.MessageType.fByteArray) {
-        val outmessage = session.createBytesMessage()
-        outmessage.writeBytes(message.getBytes)
-        outmessage.setStringProperty("ContentType", qc.content_type)
-        producer.send(outmessage)
-      } else { // By default we are taking (qc.msgType == com.ligadata.AdaptersConfiguration.MessageType.fText)
-        val outmessage = session.createTextMessage(new String(message))
-        outmessage.setStringProperty("ContentType", qc.content_type)
-        producer.send(outmessage)
-      }
-      val key = Category + "/" + qc.Name + "/evtCnt"
-      cntrAdapter.addCntr(key, 1) // for now adding each row
+      // Op is not atomic
+      messages.foreach(message => {
+        // Do we need text Message or Bytes Message?
+        if (qc.msgType == com.ligadata.AdaptersConfiguration.MessageType.fByteArray) {
+          val outmessage = session.createBytesMessage()
+          outmessage.writeBytes(message)
+          outmessage.setStringProperty("ContentType", qc.content_type)
+          producer.send(outmessage)
+        } else { // By default we are taking (qc.msgType == com.ligadata.AdaptersConfiguration.MessageType.fText)
+          val outmessage = session.createTextMessage(new String(message))
+          outmessage.setStringProperty("ContentType", qc.content_type)
+          producer.send(outmessage)
+        }
+        val key = Category + "/" + qc.Name + "/evtCnt"
+        cntrAdapter.addCntr(key, 1) // for now adding each row
+      })
     } catch {
       case jmsex: Exception => {
         printFailure(jmsex)
         val stackTrace = StackTrace.ThrowableTraceString(jmsex)
-      LOG.debug("StackTrace:"+stackTrace)
+        LOG.debug("StackTrace:" + stackTrace)
       }
     }
-  }
-
-  override def send(message: Array[Byte], partKey: Array[Byte]): Unit = {
-    send(new String(message), new String(partKey))
-    // If we are going to send ByteArray message, we need to switch sending to here.
   }
 
   override def Shutdown(): Unit = {

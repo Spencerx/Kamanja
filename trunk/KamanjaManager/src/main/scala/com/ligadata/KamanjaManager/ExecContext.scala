@@ -46,7 +46,8 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
 
   val xform = new TransformMessageData
   val engine = new LearningEngine(input, curPartitionKey)
-  var cntr: Long = 0
+  val allOutputAdaptersNames = if (kamanjaCallerCtxt.outputAdapters != null) kamanjaCallerCtxt.outputAdapters.map(o => o.inputConfig.Name.toLowerCase) else Array[String]()
+  val allOuAdapters = if (kamanjaCallerCtxt.outputAdapters != null) kamanjaCallerCtxt.outputAdapters.map(o => (o.inputConfig.Name.toLowerCase, o)).toMap else Map[String, OutputAdapter]()
   def execute(data: Array[Byte], format: String, uniqueKey: PartitionUniqueRecordKey, uniqueVal: PartitionUniqueRecordValue, readTmNanoSecs: Long, readTmMilliSecs: Long, ignoreOutput: Boolean, associatedMsg: String, delimiters: DataDelimiters): Unit = {
     try {
       val uk = uniqueKey.Serialize
@@ -54,7 +55,7 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
       val transId = transService.getNextTransId
       LOG.debug("Processing uniqueKey:%s, uniqueVal:%s, Datasize:%d".format(uk, uv, data.size))
 
-      var outputResults = ArrayBuffer[(String, String)]() // Adapter/Queue name & output message 
+      var outputResults = ArrayBuffer[(String, String, String)]() // Adapter/Queue name, Partition Key & output message 
 
       try {
         val transformStartTime = System.nanoTime
@@ -64,7 +65,7 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
         val totalXformedMsgs = xformedmsgs.size
         xformedmsgs.foreach(xformed => {
           xformedMsgCntr += 1
-          var output = engine.execute(transId, data, xformed._1, xformed._2, xformed._3, kamanjaCallerCtxt.envCtxt, readTmNanoSecs, readTmMilliSecs, uk, uv, xformedMsgCntr, totalXformedMsgs, ignoreOutput)
+          var output = engine.execute(transId, data, xformed._1, xformed._2, xformed._3, kamanjaCallerCtxt.envCtxt, readTmNanoSecs, readTmMilliSecs, uk, uv, xformedMsgCntr, totalXformedMsgs, ignoreOutput, allOutputAdaptersNames)
           if (output != null) {
             outputResults ++= output
           }
@@ -109,18 +110,17 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
             }
           }
         }
-        
-        val sendOutStartTime = System.nanoTime
-        if (outputResults != null && kamanjaCallerCtxt.outputAdapters != null) {
-          // Not yet checking for Adapter Name matches
-          outputResults.foreach(adapteroutput => {
-            kamanjaCallerCtxt.outputAdapters.foreach(o => {
-              o.send(adapteroutput._2, cntr.toString)
-              cntr += 1
-            })
-          })
-        }
 
+        val sendOutStartTime = System.nanoTime
+        val outputs = outputResults.groupBy(_._1)
+
+        outputs.foreach(output => {
+          val oadap = allOuAdapters.getOrElse(output._1, null)
+          LOG.debug("Sending data => " + output._2.map(o => o._1 + "~~~" + o._2 + "~~~" + o._3).mkString("###"))
+          if (oadap != null) {
+            oadap.send(output._2.map(out => out._3.getBytes("UTF8")).toArray, output._2.map(out => out._2.getBytes("UTF8")).toArray)
+          }
+        })
         if (KamanjaConfiguration.waitProcessingTime > 0 && KamanjaConfiguration.waitProcessingSteps(3)) {
           try {
             LOG.debug("Started Waiting in Step 3 (before removing sent data) for Message:" + dispMsg)
@@ -133,7 +133,7 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
             }
           }
         }
-                
+
         kamanjaCallerCtxt.envCtxt.removeCommittedKey(transId, uk)
         LOG.info(ManagerUtils.getComponentElapsedTimeStr("SendResults", uv, readTmNanoSecs, sendOutStartTime))
 

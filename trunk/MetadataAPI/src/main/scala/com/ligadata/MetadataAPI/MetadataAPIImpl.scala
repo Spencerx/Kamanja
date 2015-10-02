@@ -900,7 +900,7 @@ object MetadataAPIImpl extends MetadataAPI {
       InitZooKeeper
       val znodePath = GetMetadataAPIConfig.getProperty("ZNODE_PATH") + "/metadataupdate"
       logger.debug("Set the data on the zookeeper node " + znodePath)
-      zkc.setData().forPath(znodePath, data)
+        zkc.setData().forPath(znodePath, data)
       PutTranId(objList(0).tranId)
     } catch {
       case e: Exception => {

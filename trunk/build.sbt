@@ -127,4 +127,6 @@ lazy val UtilityService = project.in(file("Utils/UtilitySerivce")) dependsOn(Exc
 
 lazy val HeartBeat = project.in(file("HeartBeat")) dependsOn(ZooKeeperListener, ZooKeeperLeaderLatch, Exceptions)
 
+lazy val FileDataConsumer = project.in(file("FileDataConsumer")) dependsOn(Exceptions, MetadataAPI)
+
 lazy val TransactionService = project.in(file("TransactionService")) dependsOn(Exceptions, KamanjaBase, ZooKeeperClient, StorageBase, StorageManager, KamanjaData)

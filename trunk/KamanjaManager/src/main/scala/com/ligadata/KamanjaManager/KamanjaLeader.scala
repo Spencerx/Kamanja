@@ -128,7 +128,7 @@ object KamanjaLeader {
 
       if (committingInfo != null && committingInfo.size > 0) {
         // For current key, we need to hold the values of Committing, What ever we have in main table, Validate Adapter Info
-        val currentValues = scala.collection.mutable.Map[String, ((Long, String, List[(String, String)]), (Long, String), (String, Int, Int, Long))]()
+        val currentValues = scala.collection.mutable.Map[String, ((Long, String, List[(String, String, String)]), (Long, String), (String, Int, Int, Long))]()
 
         committingInfo.foreach(ci => {
           currentValues(ci._1.toLowerCase) = (ci._2, null, null)
@@ -163,24 +163,21 @@ object KamanjaLeader {
           })
         }
 
+        val allOuAdapters = if (outputAdapters != null && currentValues.size > 0) outputAdapters.map(o => (o.inputConfig.Name.toLowerCase, o)).toMap else Map[String, OutputAdapter]()
+
         // Now find which one we need to resend
         // BUGBUG:: Not yet handling M/N Sub Messages for a Message
-        var tmpCntr = 0
         currentValues.foreach(possibleKeyToSend => {
           // We should not have possibleKeyToSend._2._1._1 < possibleKeyToSend._2._2._1 and if it is possibleKeyToSend._2._1._1 > possibleKeyToSend._2._2._1, the data is not yet committed to main table.
           if (possibleKeyToSend._2._1 != null && possibleKeyToSend._2._2 != null && possibleKeyToSend._2._1._1 == possibleKeyToSend._2._2._1) { // This is just committing record and is written in main table.
             if (possibleKeyToSend._2._3 == null || possibleKeyToSend._2._1._1 != possibleKeyToSend._2._3._4) { // Not yet written in. possibleKeyToSend._2._1._1 < possibleKeyToSend._2._3._4 should not happen and possibleKeyToSend._2._1._1 == possibleKeyToSend._2._3._4 is already written.
-              val outputResults = possibleKeyToSend._2._1._3
-              if (outputResults != null && outputAdapters != null) {
-                // Not yet checking for Adapter Name matches
-                outputResults.foreach(adapteroutput => {
-                  outputAdapters.foreach(o => {
-                    o.send(adapteroutput._2, tmpCntr.toString)
-                    tmpCntr += 1
-                  })
-                })
-                LOG.debug("All %d results sent to each output queues of %d".format(outputResults.size, outputAdapters.size))
-              }
+              val outputs = possibleKeyToSend._2._1._3.groupBy(_._1)
+              outputs.foreach(output => {
+                val oadap = allOuAdapters.getOrElse(output._1, null)
+                if (oadap != null) {
+                  oadap.send(output._2.map(out => out._3.getBytes("UTF8")).toArray, output._2.map(out => out._2.getBytes("UTF8")).toArray)
+                }
+              })
             }
           }
         })
@@ -486,7 +483,7 @@ object KamanjaLeader {
     LOG.debug("EventChangeCallback => Exit")
   }
 
-  private def GetUniqueKeyValue(uk: String): (Long, String, List[(String, String)]) = {
+  private def GetUniqueKeyValue(uk: String): (Long, String, List[(String, String, String)]) = {
     envCtxt.getAdapterUniqueKeyValue(0, uk)
   }
 

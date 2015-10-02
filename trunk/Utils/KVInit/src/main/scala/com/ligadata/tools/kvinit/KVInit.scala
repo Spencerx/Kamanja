@@ -219,9 +219,9 @@ object KvInitConfiguration {
 
 class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: Array[String], val keyfieldnames: Array[String], keyAndValueDelimiter1: String,
   fieldDelimiter1: String, valueDelimiter1: String, ignoreerrors: String, ignoreRecords: Int, format: String) extends LogTrait {
-  val fieldDelimiter = if (fieldDelimiter1 != null && fieldDelimiter1.size > 0) fieldDelimiter1 else ","
-  val keyAndValueDelimiter = if (keyAndValueDelimiter1 != null && keyAndValueDelimiter1.size > 0) keyAndValueDelimiter1 else "\\x01"
-  val valueDelimiter = if (valueDelimiter1 != null && valueDelimiter1.size > 0) valueDelimiter1 else "~"
+  val fieldDelimiter = if (DataDelimiters.IsEmptyDelimiter(fieldDelimiter1) == false) fieldDelimiter1 else ","
+  val keyAndValueDelimiter = if (DataDelimiters.IsEmptyDelimiter(keyAndValueDelimiter1) == false) keyAndValueDelimiter1 else "\\x01"
+  val valueDelimiter = if (DataDelimiters.IsEmptyDelimiter(valueDelimiter1) == false) valueDelimiter1 else "~"
 
   var ignoreErrsCount = if (ignoreerrors != null && ignoreerrors.size > 0) ignoreerrors.toInt else 0
   if (ignoreErrsCount < 0) ignoreErrsCount = 0
@@ -477,9 +477,9 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
   private def prepareInputData(inputStr: String): InputData = {
     /** if we can make one ... we add the data to the store. This will crash if the data is bad */
     if (isDelimited) {
-      val fieldDelimiter = if (fieldDelimiter1 != null && fieldDelimiter1.size > 0) fieldDelimiter1 else ","
-      val keyAndValueDelimiter = if (keyAndValueDelimiter1 != null && keyAndValueDelimiter1.size > 0) keyAndValueDelimiter1 else "\\x01"
-      val valueDelimiter = if (valueDelimiter1 != null && valueDelimiter1.size > 0) valueDelimiter1 else "~"
+      val fieldDelimiter = if (DataDelimiters.IsEmptyDelimiter(fieldDelimiter1) == false) fieldDelimiter1 else ","
+      val keyAndValueDelimiter = if (DataDelimiters.IsEmptyDelimiter(keyAndValueDelimiter1) == false) keyAndValueDelimiter1 else "\\x01"
+      val valueDelimiter = if (DataDelimiters.IsEmptyDelimiter(valueDelimiter1) == false) valueDelimiter1 else "~"
       val delimiters = new DataDelimiters()
       delimiters.keyAndValueDelimiter = keyAndValueDelimiter
       delimiters.fieldDelimiter = fieldDelimiter
@@ -491,9 +491,9 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
     }
 
     if (isKv) {
-      val fieldDelimiter = if (fieldDelimiter1 != null && fieldDelimiter1.size > 0) fieldDelimiter1 else ","
-      val keyAndValueDelimiter = if (keyAndValueDelimiter1 != null && keyAndValueDelimiter1.size > 0) keyAndValueDelimiter1 else "\\x01"
-      val valueDelimiter = if (valueDelimiter1 != null && valueDelimiter1.size > 0) valueDelimiter1 else "~"
+      val fieldDelimiter = if (DataDelimiters.IsEmptyDelimiter(fieldDelimiter1) == false) fieldDelimiter1 else ","
+      val keyAndValueDelimiter = if (DataDelimiters.IsEmptyDelimiter(keyAndValueDelimiter1) == false) keyAndValueDelimiter1 else "\\x01"
+      val valueDelimiter = if (DataDelimiters.IsEmptyDelimiter(valueDelimiter1) == false) valueDelimiter1 else "~"
       val delimiters = new DataDelimiters()
       delimiters.keyAndValueDelimiter = keyAndValueDelimiter
       delimiters.fieldDelimiter = fieldDelimiter

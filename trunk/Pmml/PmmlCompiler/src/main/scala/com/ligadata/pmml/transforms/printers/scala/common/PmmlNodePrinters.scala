@@ -1082,7 +1082,15 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		val verNoStr : String = "_" + versionNo.toString
 		
 		/** use the namespace garnered from the application name in the header for the */
-		val nmspc : String = "System" /** only System namespace possible at the moment */
+    val optModelNamespace : Option[String] = ctx.pmmlTerms.apply("ModelNamespace")
+    val nmspc : String = optModelNamespace match {
+      case Some(optModelNamespace) => optModelNamespace
+      case _ => {
+        PmmlError.logError(ctx, "The ModelNamespace was not set in the modelClassComment() fcn")
+        "**NO NAME WAS SPECIFIED**"
+      }
+    }
+
 		if (ctx.injectLogging) {
 			objBuffer.append(s"object $classname extends ModelBaseObj with LogTrait {\n") 
 		} else {

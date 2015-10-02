@@ -250,17 +250,17 @@ trait EnvContext {
   def containsAll(transId: Long, containerName: String, partKeys: Array[List[String]], primaryKeys: Array[List[String]]): Boolean //partKeys.size should be same as primaryKeys.size
 
   // Adapters Keys & values
-  def setAdapterUniqueKeyValue(transId: Long, key: String, value: String, outputResults: List[(String, String)]): Unit
-  def getAdapterUniqueKeyValue(transId: Long, key: String): (Long, String, List[(String, String)])
+  def setAdapterUniqueKeyValue(transId: Long, key: String, value: String, outputResults: List[(String, String, String)]): Unit
+  def getAdapterUniqueKeyValue(transId: Long, key: String): (Long, String, List[(String, String, String)])
 /*
   def getAllIntermediateStatusInfo: Array[(String, (String, Int, Int))] // Get all Status information from intermediate table. No Transaction required here.
   def getIntermediateStatusInfo(keys: Array[String]): Array[(String, (String, Int, Int))] // Get Status information from intermediate table for given keys. No Transaction required here.
 */
   def getAllAdapterUniqKvDataInfo(keys: Array[String]): Array[(String, (Long, String))] // Get Status information from Final table. No Transaction required here.
 
-  def getAllIntermediateCommittingInfo: Array[(String, (Long, String, List[(String, String)]))] // Getting intermediate committing information. Once we commit we don't have this, because we remove after commit
+  def getAllIntermediateCommittingInfo: Array[(String, (Long, String, List[(String, String, String)]))] // Getting intermediate committing information. Once we commit we don't have this, because we remove after commit
 
-  def getAllIntermediateCommittingInfo(keys: Array[String]): Array[(String, (Long, String, List[(String, String)]))] // Getting intermediate committing information.
+  def getAllIntermediateCommittingInfo(keys: Array[String]): Array[(String, (Long, String, List[(String, String, String)]))] // Getting intermediate committing information.
 
   def removeCommittedKey(transId: Long, key: String): Unit
   def removeCommittedKeys(keys: Array[String]): Unit
@@ -270,7 +270,8 @@ trait EnvContext {
   def getModelsResult(transId: Long, key: List[String]): scala.collection.mutable.Map[String, SavedMdlResult]
 
   // Final Commit for the given transaction
-  def commitData(transId: Long, key: String, value: String, outputResults: List[(String, String)]): Unit
+  // outputResults has AdapterName, PartitionKey & Message
+  def commitData(transId: Long, key: String, value: String, outputResults: List[(String, String, String)]): Unit
 
   // Save State Entries on local node & on Leader
   def PersistLocalNodeStateEntries: Unit

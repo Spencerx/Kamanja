@@ -32,8 +32,8 @@ class TransformMessageData {
   private val LOG = Logger.getLogger(getClass);
 
   private def parseCsvInputData(inputData: String, associatedMsg: String, delimiters: DataDelimiters): (String, MsgContainerObjAndTransformInfo, InputData) = {
-    if (delimiters.fieldDelimiter == null) delimiters.fieldDelimiter = ","
-    if (delimiters.valueDelimiter == null) delimiters.valueDelimiter = "~"
+    if (delimiters.IsFieldDelimiterEmpty) delimiters.fieldDelimiter = ","
+    if (delimiters.IsValueDelimiterEmpty) delimiters.valueDelimiter = "~"
     val str_arr = inputData.split(delimiters.fieldDelimiter, -1)
     val inpData = new DelimitedData(inputData, delimiters)
     inpData.curPos = 0
@@ -151,9 +151,9 @@ class TransformMessageData {
     if (associatedMsg == null || associatedMsg.size == 0)
       throw new Exception("KV data expecting Associated messages as input.")
 
-    if (delimiters.fieldDelimiter == null) delimiters.fieldDelimiter = ","
-    if (delimiters.valueDelimiter == null) delimiters.valueDelimiter = "~"
-    if (delimiters.keyAndValueDelimiter == null) delimiters.keyAndValueDelimiter = "\\x01"
+    if (delimiters.IsFieldDelimiterEmpty) delimiters.fieldDelimiter = ","
+    if (delimiters.IsValueDelimiterEmpty) delimiters.valueDelimiter = "~"
+    if (delimiters.IsKeyAndValueDelimiterEmpty) delimiters.keyAndValueDelimiter = "\\x01"
 
     val str_arr = inputData.split(delimiters.fieldDelimiter, -1)
     val inpData = new KvData(inputData, delimiters)

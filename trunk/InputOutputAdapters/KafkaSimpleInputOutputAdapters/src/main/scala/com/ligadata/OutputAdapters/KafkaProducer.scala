@@ -24,6 +24,7 @@ import org.apache.log4j.Logger
 import com.ligadata.InputOutputAdapterInfo.{ AdapterConfiguration, OutputAdapter, OutputAdapterObj, CountersAdapter }
 import com.ligadata.AdaptersConfiguration.KafkaQueueAdapterConfiguration
 import com.ligadata.Exceptions.StackTrace
+import scala.collection.mutable.ArrayBuffer
 
 object KafkaProducer extends OutputAdapterObj {
   def CreateOutputAdapter(inputConfig: AdapterConfiguration, cntrAdapter: CountersAdapter): OutputAdapter = new KafkaProducer(inputConfig, cntrAdapter)
@@ -64,20 +65,29 @@ class KafkaProducer(val inputConfig: AdapterConfiguration, cntrAdapter: Counters
   // props.put("socket.receive.buffer", bufferMemory.toString)
   props.put("client.id", clientId)
 
-  val producer = new Producer[AnyRef, AnyRef](new ProducerConfig(props)) // Not closing this producer at this moment
+  val producer = new Producer[Array[Byte], Array[Byte]](new ProducerConfig(props)) // Not closing this producer at this moment
 
-  override def send(message: String, partKey: String): Unit = send(message.getBytes("UTF8"), partKey.getBytes("UTF8"))
-
-  override def send(message: Array[Byte], partKey: Array[Byte]): Unit = {
+  // To send an array of messages. messages.size should be same as partKeys.size
+  override def send(messages: Array[Array[Byte]], partKeys: Array[Array[Byte]]): Unit = {
+    if (messages.size != partKeys.size) {
+      LOG.error("Message and Partition Keys hould has same number of elements. Message has %d and Partition Keys has %d".format(messages.size, partKeys.size))
+      return
+    }
+    if (messages.size == 0) return
     try {
-      producer.send(new KeyedMessage(qc.topic, partKey, message))
+      val keyMessages = new ArrayBuffer[KeyedMessage[Array[Byte], Array[Byte]]](messages.size)
+      for (i <- 0 until messages.size) {
+        keyMessages += new KeyedMessage(qc.topic, partKeys(i), messages(i))
+      }
+      producer.send(keyMessages: _*) // Thinking this op is atomic for (can write multiple partitions into one queue, but don't know whether it is atomic per partition in the queue).
       val key = Category + "/" + qc.Name + "/evtCnt"
-      cntrAdapter.addCntr(key, 1) // for now adding each row
+      cntrAdapter.addCntr(key, messages.size) // for now adding rows
     } catch {
       case e: Exception => {
         LOG.error("Failed to send :" + e.getMessage)
       }
     }
+
   }
 
   override def Shutdown(): Unit = {

@@ -53,8 +53,8 @@ class OutputMsgGenerator {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.debug("\nStackTrace:"+stackTrace)
-        throw new Exception(e.getMessage())
+        log.error("\nStackTrace:"+stackTrace)
+        throw e
       }
     }
   }
@@ -82,7 +82,7 @@ class OutputMsgGenerator {
           })
           val pkey = partitionKey._1 + key
           val parttionkey = myMap.getOrElse(pkey, "")
-          paritionKeys +:= parttionkey.toString
+          paritionKeys +:= ValueToString(parttionkey, ",")
         })
 
         val queueName = outputMsgDef.Queue
@@ -92,8 +92,8 @@ class OutputMsgGenerator {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.debug("\nStackTrace:"+stackTrace)
-        throw new Exception(e.getMessage())
+        log.error("\nStackTrace:"+stackTrace)
+        throw e
       }
     }
     output.toArray
@@ -102,9 +102,9 @@ class OutputMsgGenerator {
   private def GetValue(m: scala.util.matching.Regex.Match) = {
     import java.util.regex.Matcher
     val grp = m.group(1)
-    // Get the value from Declaration Variable or Message or Models for varname. Tulasi populate varvalue
+    // Get the value from Declaration Variable or Message or Models for varname.
     val varvalue = myMap.getOrElse(grp.toString().toLowerCase(), null)
-    varvalue.toString
+    ValueToString(varvalue, ",")
   }
   /**
    *
@@ -175,8 +175,8 @@ class OutputMsgGenerator {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.debug("\nStackTrace:"+stackTrace)
-        throw new Exception(e.getMessage())
+        log.error("\nStackTrace:"+stackTrace)
+        throw e
       }
     }
   }
@@ -289,7 +289,7 @@ class OutputMsgGenerator {
         } else if (message.isInstanceOf[MessageContainerBase]) {
           val value = message.asInstanceOf[MessageContainerBase].get(fldName.toString)
           if (typetype.equals("tstring") || typetype.equals("tlong") || typetype.equals("tfloat") || typetype.equals("tdouble") || typetype.equals("tboolean") || typetype.equals("tchar") || typetype.equals("tint")) {
-            return value.toString
+            return ValueToString(value, ",")
           } else {
             return getMsgFldValue(value, fld(index + 1)._1, fld(index + 1)._2, fld, index + 1, delimiter)
           }
@@ -299,14 +299,15 @@ class OutputMsgGenerator {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        log.debug("\nStackTrace:"+stackTrace)
-        throw new Exception(e.getMessage())
+        log.error("\nStackTrace:"+stackTrace)
+        throw e
       }
     }
     return null
   }
 
   private def ValueToString(v: Any, delimiter: String): String = {
+    if (v == null) return ""
     if (v.isInstanceOf[Set[_]]) {
       return v.asInstanceOf[Set[_]].mkString(delimiter)
     }
