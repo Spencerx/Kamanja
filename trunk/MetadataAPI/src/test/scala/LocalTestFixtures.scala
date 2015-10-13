@@ -24,10 +24,9 @@ trait CommonResources {
   def applicationJarsDirectory:String = Some(getClass.getResource("/jars/lib/application").getPath).getOrElse(throw new Exception("Failed to get resource '/jars/lib/application'"))
 
   def cassandraDataDirectory:String = dataDirectory + "/cassandra"
-
 }
 
 trait LocalTestFixtures extends CommonResources {
-  val mdMan: MetadataManager = new MetadataManager(new MetadataAPIProperties)
+  val mdMan: MetadataManager = new MetadataManager(new MetadataAPIProperties())
   val zkServer = EmbeddedZookeeper
 }

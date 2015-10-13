@@ -30,9 +30,10 @@ class ConstantMethodGenerator {
 			populateJson(inputdata.asInstanceOf[JsonData])
 	  else if (inputdata.isInstanceOf[XmlData])
 			populateXml(inputdata.asInstanceOf[XmlData])
-    else if (inputdata.isInstanceOf[KvData])
+      else if (inputdata.isInstanceOf[KvData])
 			populateKvData(inputdata.asInstanceOf[KvData])
 	  else throw new Exception("Invalid input data")
+      timePartitionData = ComputeTimePartitionData
     
     }
 		"""
@@ -241,9 +242,9 @@ class ConstantMethodGenerator {
   }
 
   //assignKVData
-  
+
   def populateMappedMsgKvData(assignKvData: String) = {
-       """
+    """
   private def populateKvData(kvData: KvData): Unit = {
     try {
       if (kvData == null)
@@ -277,9 +278,7 @@ class ConstantMethodGenerator {
   }
   """
   }
-  
-  
-  
+
   def addInputJsonLeftOverKeys = {
     """
         var dataKeySet: Set[Any] = Set();
@@ -374,10 +373,10 @@ class ConstantMethodGenerator {
     }
     funcStr
   }
-  
+
   //assignKvDataForArray
-  
-   def assignKvDataForArray(fname: String, typeImpl: String, msg: Message, typ: String): String = {
+
+  def assignKvDataForArray(fname: String, typeImpl: String, msg: Message, typ: String): String = {
     var funcStr: String = ""
 
     val funcName = "fields(\"" + fname + "\")";
@@ -434,8 +433,6 @@ class ConstantMethodGenerator {
     funcStr
   }
 
-
-  
   //assignKvForPrimArrayBuffer
   def assignKvForPrimArrayBuffer(fname: String, typeImpl: String, msg: Message, typ: String): String = {
     var funcStr: String = ""
@@ -465,8 +462,7 @@ class ConstantMethodGenerator {
     }
     funcStr
   }
-  
-  
+
   def assignJsonForCntrArrayBuffer(fname: String, typeImpl: String) = {
     """
 	 
@@ -568,8 +564,14 @@ class ConstantMethodGenerator {
   /*
    * function to convert the old version to new version in desrializarion of messages especially when ArrayBuffer/Array of child messages or Child Message occurs
    */
-  def getConvertOldVertoNewVer(convertStr: String, oldObj: String, newObj: Any): String = {
+  def getConvertOldVertoNewVer(convertStr: String, oldObj: String, newObj: Any, mesg: Message): String = {
+    var timePartitionData: String = ""
     var convertFuncStr: String = ""
+    if (mesg.Fixed.equalsIgnoreCase("true"))
+      timePartitionData = "timePartitionData = oldObj.timePartitionData;"
+    else if (mesg.Fixed.equalsIgnoreCase("false"))
+      timePartitionData = "timePartitionData = oldObj.fields(\"timePartitionData\")._2.asInstanceOf[Long]; \n fields(\"timePartitionData\") = (-1, timePartitionData);" /// check the mapped msgs
+
     // if (prevObjExists) {
     if (oldObj != null && oldObj.toString.trim() != "") {
       if (convertStr != null && convertStr.trim() != "") {
@@ -578,6 +580,7 @@ class ConstantMethodGenerator {
      def ConvertPrevToNewVerObj(oldObj : """ + oldObj + """) : Unit = {    
          if( oldObj != null){
            """ + convertStr + """
+         """ + timePartitionData + """  
          }  
        }"""
         //    }
@@ -607,6 +610,7 @@ class ConstantMethodGenerator {
     override def Serialize(dos: DataOutputStream) : Unit = {
         try {
     	   """ + serStr + """
+    	 com.ligadata.BaseTypes.LongImpl.SerializeIntoDataOutputStream(dos, timePartitionData);
     	} catch {
     		case e: Exception => {
     	    val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -626,9 +630,12 @@ class ConstantMethodGenerator {
 
   //create the deserialized function in generated scala class 
 
-  def getPrevDeserStr(prevVerMsgObjstr: String, prevObjDeserStr: String, recompile: Boolean): String = {
+  def getPrevDeserStr(prevVerMsgObjstr: String, prevObjDeserStr: String, recompile: Boolean, fixed: Boolean): String = {
     var preVerDeserStr: String = ""
+    var timePartitionfldMapped: String = ""
     // if (recompile == false && prevVerMsgObjstr != null && prevVerMsgObjstr.trim() != "") {
+    if (!fixed)
+      timePartitionfldMapped = "fields(\"timePartitionData\") = (-1, timePartitionData); "
 
     if (prevVerMsgObjstr != null && prevVerMsgObjstr.trim() != "") {
       val prevVerObjStr = "val prevVerObj = new %s()".format(prevVerMsgObjstr)
@@ -637,6 +644,8 @@ class ConstantMethodGenerator {
                 """ + prevVerObjStr + """ 
                 prevVerObj.Deserialize(dis, mdResolver, loader, savedDataVersion)   
                """ + prevObjDeserStr + """ 
+               timePartitionData = prevVerObj.timePartitionData;
+                """ + timePartitionfldMapped + """             
            
 	     } else """
     }
@@ -646,11 +655,17 @@ class ConstantMethodGenerator {
 
   def getDeserStr(deserStr: String, fixed: Boolean): String = {
     var deSer: String = ""
-
+    var timePartitionFld: String = ""
+    if (!fixed) {
+      timePartitionFld = "fields(\"timePartitionData\") = (-1, timePartitionData)"
+    }
     if (deserStr != null && deserStr.trim() != "") {
       deSer = """
          if(prevVer == currentVer){  
               """ + deserStr + """
+         timePartitionData = com.ligadata.BaseTypes.LongImpl.DeserializeFromDataInputStream(dis)
+          """ + timePartitionFld + """
+      
         } else throw new Exception("Current Message/Container Version "+currentVer+" should be greater than Previous Message Version " +prevVer + "." )
      """
     }
@@ -684,7 +699,7 @@ class ConstantMethodGenerator {
     var getDeserFunc: String = ""
     var preVerDeserStr: String = ""
     var deSer: String = ""
-    preVerDeserStr = getPrevDeserStr(prevVerMsgObjstr, prevObjDeserStr, recompile)
+    preVerDeserStr = getPrevDeserStr(prevVerMsgObjstr, prevObjDeserStr, recompile, fixed)
     deSer = getDeserStr(deserStr, fixed)
 
     if (deserStr != null && deserStr.trim() != "")
@@ -752,6 +767,7 @@ class ConstantMethodGenerator {
       SerializeBaseTypes(dos)
        // Non Base Types
      SerializeNonBaseTypes(dos)
+     com.ligadata.BaseTypes.LongImpl.SerializeIntoDataOutputStream(dos, fields("timePartitionData")._2.asInstanceOf[Long])
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -767,6 +783,7 @@ class ConstantMethodGenerator {
     """
     private def SerializeNonBaseTypes(dos: DataOutputStream): Unit = {
     """ + mappedMsgSerializeArray + """
+    
     }
     """
   }
@@ -832,6 +849,87 @@ class ConstantMethodGenerator {
          }
        })
 	 """
+  }
+
+ //Handling the KeyValue Data with Native name for Fixed Messages
+
+ def getFixedMsgNativeKeyValueData(fixedKeyValueData: String) : String  = {
+
+    var retFixedKeyValueData: String = ""
+
+    if (fixedKeyValueData != null && fixedKeyValueData.trim() != "") {
+
+      retFixedKeyValueData = """
+    override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = {
+
+    var keyValues: scala.collection.mutable.Map[String, (String, Any)] = scala.collection.mutable.Map[String, (String, Any)]()
+
+    try {
+         """ + fixedKeyValueData + """  
+    } catch {
+      case e: Exception => {
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.debug("StackTrace:" + stackTrace)
+        throw e
+      }
+    }
+    return keyValues.toMap
+  }
+    """
+
+    } else {
+      retFixedKeyValueData = """
+    override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = { 
+   
+    	return null
+    }
+    """
+
+    }
+    retFixedKeyValueData
+  }
+
+  //Handling the KeyValue Data with Native name for Mapped Messages
+
+  def getMappedMsgNativeKeyValueData() = {
+
+    """
+    override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = {
+	  var keyValues: scala.collection.mutable.Map[String, (String, Any)] = scala.collection.mutable.Map[String, (String, Any)]()
+	  try {
+      	if(fields != null) {
+	      	fields.foreach(field => {
+	        	if (nativeKeyMap != null && nativeKeyMap.contains(field._1))
+	          		keyValues(field._1) = (nativeKeyMap(field._1), field._2._2);
+	  			else
+	  				keyValues(field._1) = (field._1, field._2._2);
+	      	})
+	  	}
+	  } catch {
+      	case e: Exception => {
+        	val stackTrace = StackTrace.ThrowableTraceString(e)
+        	LOG.debug("StackTrace:" + stackTrace)
+        	throw e
+      	}
+	  }
+	  return keyValues.toMap
+	}
+"""
+  }
+  
+  //NativeKey Variable in Message
+  
+  def getNativeKeyMapVar(nativeKeyMap: String ) = {
+    var nativeKeymap : String = ""
+    
+    if(nativeKeyMap != null && nativeKeyMap.trim() != "" && nativeKeyMap.size > 0)
+    	nativeKeymap = nativeKeyMap.substring(0, nativeKeyMap.length()-2)
+    
+    """
+    var nativeKeyMap  =  scala.collection.mutable.Map[String, String]("""+nativeKeymap+""")
+    """    
+    
+    
   }
 
 }

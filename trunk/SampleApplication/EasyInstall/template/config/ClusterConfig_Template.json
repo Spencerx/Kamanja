@@ -40,7 +40,7 @@
           "metadata_2.10-1.0.jar",
           "exceptions_2.10-1.0.jar",
           "kamanjabase_2.10-1.0.jar",
-          "kamanjadata_2.10-0.1.0.jar",
+          "kvbase_2.10-0.1.0.jar",
           "bootstrap_2.10-1.0.jar",
           "basetypes_2.10-0.1.0.jar",
           "metadataapi_2.10-1.0.jar",
@@ -182,7 +182,7 @@
             "RestAPI",
             "ProcessingEngine"
           ],
-          "Classpath": ".:{InstallDirectory}/lib/system/scala-reflect-2.10.4.jar:{InstallDirectory}/lib/system/metadata_2.10-1.0.jar:{InstallDirectory}/lib/system/basefunctions_2.10-0.1.0.jar:{InstallDirectory}/lib/system/messagedef_2.10-1.0.jar:{InstallDirectory}/lib/system/methodextractor_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlcompiler_2.10-1.0.jar:{InstallDirectory}/lib/system/kamanjabase_2.10-1.0.jar:{InstallDirectory}/lib/system/bootstrap_2.10-1.0.jar:{InstallDirectory}/lib/system/joda-time-2.8.2.jar:{InstallDirectory}/lib/system/joda-convert-1.6.jar:{InstallDirectory}/lib/system/basetypes_2.10-0.1.0.jar:{InstallDirectory}/lib/system/pmmludfs_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlruntime_2.10-1.0.jar:{InstallDirectory}/lib/system/json4s-native_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-core_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-ast_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-databind-2.3.1.jar:{InstallDirectory}/lib/system/jackson-annotations-2.3.0.jar:{InstallDirectory}/lib/system/json4s-jackson_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-core-2.3.1.jar:{InstallDirectory}/lib/system/log4j-1.2.17.jar:{InstallDirectory}/lib/system/guava-18.0.jar:{InstallDirectory}/lib/system/jsr305-1.3.9.jar:{InstallDirectory}/lib/system/scala-library-2.10.4.jar:{InstallDirectory}/lib/system/datadelimiters_2.10-1.0.jar"
+          "Classpath": ".:{InstallDirectory}/lib/system/scala-reflect-2.10.4.jar:{InstallDirectory}/lib/system/metadata_2.10-1.0.jar:{InstallDirectory}/lib/system/basefunctions_2.10-0.1.0.jar:{InstallDirectory}/lib/system/messagedef_2.10-1.0.jar:{InstallDirectory}/lib/system/methodextractor_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlcompiler_2.10-1.0.jar:{InstallDirectory}/lib/system/kamanjabase_2.10-1.0.jar:{InstallDirectory}/lib/system/kvbase_2.10-0.1.0.jar:{InstallDirectory}/lib/system/bootstrap_2.10-1.0.jar:{InstallDirectory}/lib/system/joda-time-2.8.2.jar:{InstallDirectory}/lib/system/joda-convert-1.6.jar:{InstallDirectory}/lib/system/basetypes_2.10-0.1.0.jar:{InstallDirectory}/lib/system/pmmludfs_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlruntime_2.10-1.0.jar:{InstallDirectory}/lib/system/json4s-native_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-core_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-ast_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-databind-2.3.1.jar:{InstallDirectory}/lib/system/jackson-annotations-2.3.0.jar:{InstallDirectory}/lib/system/json4s-jackson_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-core-2.3.1.jar:{InstallDirectory}/lib/system/log4j-1.2.17.jar:{InstallDirectory}/lib/system/guava-18.0.jar:{InstallDirectory}/lib/system/jsr305-1.3.9.jar:{InstallDirectory}/lib/system/scala-library-2.10.4.jar:{InstallDirectory}/lib/system/datadelimiters_2.10-1.0.jar"
         },
         {
           "NodeId": "2",
@@ -198,7 +198,7 @@
             "RestAPI",
             "ProcessingEngine"
           ],
-          "Classpath": ".:{InstallDirectory}/lib/system/metadata_2.10-1.0.jar:{InstallDirectory}/lib/system/basefunctions_2.10-0.1.0.jar:{InstallDirectory}/lib/system/messagedef_2.10-1.0.jar:{InstallDirectory}/lib/system/methodextractor_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlcompiler_2.10-1.0.jar:{InstallDirectory}/lib/system/kamanjabase_2.10-1.0.jar:{InstallDirectory}/lib/system/bootstrap_2.10-1.0.jar:{InstallDirectory}/lib/system/joda-time-2.8.2.jar:{InstallDirectory}/lib/system/joda-convert-1.6.jar:{InstallDirectory}/lib/system/basetypes_2.10-0.1.0.jar:{InstallDirectory}/lib/system/pmmludfs_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlruntime_2.10-1.0.jar:{InstallDirectory}/lib/system/json4s-native_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-core_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-ast_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-databind-2.3.1.jar:{InstallDirectory}/lib/system/jackson-annotations-2.3.0.jar:{InstallDirectory}/lib/system/json4s-jackson_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-core-2.3.1.jar:{InstallDirectory}/lib/system/log4j-1.2.17.jar:{InstallDirectory}/lib/system/jsr305-1.3.9.jar:{InstallDirectory}/lib/system/scala-library-2.10.4.jar:{InstallDirectory}/lib/system/datadelimiters_2.10-1.0.jar"
+          "Classpath": ".:{InstallDirectory}/lib/system/metadata_2.10-1.0.jar:{InstallDirectory}/lib/system/basefunctions_2.10-0.1.0.jar:{InstallDirectory}/lib/system/messagedef_2.10-1.0.jar:{InstallDirectory}/lib/system/methodextractor_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlcompiler_2.10-1.0.jar:{InstallDirectory}/lib/system/kamanjabase_2.10-1.0.jar:{InstallDirectory}/lib/system/kvbase_2.10-0.1.0.jar:{InstallDirectory}/lib/system/bootstrap_2.10-1.0.jar:{InstallDirectory}/lib/system/joda-time-2.8.2.jar:{InstallDirectory}/lib/system/joda-convert-1.6.jar:{InstallDirectory}/lib/system/basetypes_2.10-0.1.0.jar:{InstallDirectory}/lib/system/pmmludfs_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlruntime_2.10-1.0.jar:{InstallDirectory}/lib/system/json4s-native_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-core_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-ast_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-databind-2.3.1.jar:{InstallDirectory}/lib/system/jackson-annotations-2.3.0.jar:{InstallDirectory}/lib/system/json4s-jackson_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-core-2.3.1.jar:{InstallDirectory}/lib/system/log4j-1.2.17.jar:{InstallDirectory}/lib/system/jsr305-1.3.9.jar:{InstallDirectory}/lib/system/scala-library-2.10.4.jar:{InstallDirectory}/lib/system/datadelimiters_2.10-1.0.jar"
         },
         {
           "NodeId": "3",
@@ -214,7 +214,7 @@
             "RestAPI",
             "ProcessingEngine"
           ],
-          "Classpath": ".:{InstallDirectory}/lib/system/metadata_2.10-1.0.jar:{InstallDirectory}/lib/system/basefunctions_2.10-0.1.0.jar:{InstallDirectory}/lib/system/messagedef_2.10-1.0.jar:{InstallDirectory}/lib/system/methodextractor_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlcompiler_2.10-1.0.jar:{InstallDirectory}/lib/system/kamanjabase_2.10-1.0.jar:{InstallDirectory}/lib/system/bootstrap_2.10-1.0.jar:{InstallDirectory}/lib/system/joda-time-2.8.2.jar:{InstallDirectory}/lib/system/joda-convert-1.6.jar:{InstallDirectory}/lib/system/basetypes_2.10-0.1.0.jar:{InstallDirectory}/lib/system/pmmludfs_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlruntime_2.10-1.0.jar:{InstallDirectory}/lib/system/json4s-native_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-core_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-ast_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-databind-2.3.1.jar:{InstallDirectory}/lib/system/jackson-annotations-2.3.0.jar:{InstallDirectory}/lib/system/json4s-jackson_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-core-2.3.1.jar:{InstallDirectory}/lib/system/log4j-1.2.17.jar:{InstallDirectory}/lib/system/datadelimiters_2.10-1.0.jar"
+          "Classpath": ".:{InstallDirectory}/lib/system/metadata_2.10-1.0.jar:{InstallDirectory}/lib/system/basefunctions_2.10-0.1.0.jar:{InstallDirectory}/lib/system/messagedef_2.10-1.0.jar:{InstallDirectory}/lib/system/methodextractor_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlcompiler_2.10-1.0.jar:{InstallDirectory}/lib/system/kamanjabase_2.10-1.0.jar:{InstallDirectory}/lib/system/kvbase_2.10-0.1.0.jar:{InstallDirectory}/lib/system/bootstrap_2.10-1.0.jar:{InstallDirectory}/lib/system/joda-time-2.8.2.jar:{InstallDirectory}/lib/system/joda-convert-1.6.jar:{InstallDirectory}/lib/system/basetypes_2.10-0.1.0.jar:{InstallDirectory}/lib/system/pmmludfs_2.10-1.0.jar:{InstallDirectory}/lib/system/pmmlruntime_2.10-1.0.jar:{InstallDirectory}/lib/system/json4s-native_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-core_2.10-3.2.9.jar:{InstallDirectory}/lib/system/json4s-ast_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-databind-2.3.1.jar:{InstallDirectory}/lib/system/jackson-annotations-2.3.0.jar:{InstallDirectory}/lib/system/json4s-jackson_2.10-3.2.9.jar:{InstallDirectory}/lib/system/jackson-core-2.3.1.jar:{InstallDirectory}/lib/system/log4j-1.2.17.jar:{InstallDirectory}/lib/system/datadelimiters_2.10-1.0.jar"
         }
       ],
       "Adapters": [
@@ -229,7 +229,8 @@
             "kafka_2.10-0.8.1.1.jar",
             "metrics-core-2.2.0.jar",
             "zkclient-0.3.jar",
-            "kamanjabase_2.10-1.0.jar"
+            "kamanjabase_2.10-1.0.jar",
+            "kvbase_2.10-0.1.0.jar"
           ],
           "AdapterSpecificCfg": {
             "HostList": "localhost:9092",
@@ -247,7 +248,8 @@
             "kafka_2.10-0.8.1.1.jar",
             "metrics-core-2.2.0.jar",
             "zkclient-0.3.jar",
-            "kamanjabase_2.10-1.0.jar"
+            "kamanjabase_2.10-1.0.jar",
+            "kvbase_2.10-0.1.0.jar"
           ],
           "AdapterSpecificCfg": {
             "HostList": "localhost:9092",
@@ -265,7 +267,8 @@
             "kafka_2.10-0.8.1.1.jar",
             "metrics-core-2.2.0.jar",
             "zkclient-0.3.jar",
-            "kamanjabase_2.10-1.0.jar"
+            "kamanjabase_2.10-1.0.jar",
+            "kvbase_2.10-0.1.0.jar"
           ],
           "AdapterSpecificCfg": {
             "HostList": "localhost:9092",
@@ -282,7 +285,8 @@
             "kafka_2.10-0.8.1.1.jar",
             "metrics-core-2.2.0.jar",
             "zkclient-0.3.jar",
-            "kamanjabase_2.10-1.0.jar"
+            "kamanjabase_2.10-1.0.jar",
+            "kvbase_2.10-0.1.0.jar"
           ],
           "AdapterSpecificCfg": {
             "HostList": "localhost:9092",

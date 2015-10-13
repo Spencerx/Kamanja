@@ -316,11 +316,10 @@ cp $ivyPath/cache/com.google.protobuf/protobuf-java/bundles/protobuf-java-2.5.0.
 cp $srcPath/Utils/ExtractData/target/scala-2.10/extractdata_2.10-1.0.jar $systemlib
 cp $ivyPath/cache/org.apache.hbase/hbase-client/jars/hbase-client-0.98.4-hadoop2.jar $systemlib
 cp $srcPath/KamanjaBase/target/scala-2.10/kamanjabase_2.10-1.0.jar $systemlib
+cp $srcPath/KvBase/target/scala-2.10/kvbase_2.10-0.1.0.jar $systemlib
 cp $ivyPath/cache/com.sleepycat/je/jars/je-4.0.92.jar $systemlib
 cp $ivyPath/cache/com.thoughtworks.paranamer/paranamer/jars/paranamer-2.6.jar $systemlib
 cp $ivyPath/cache/javax.servlet/servlet-api/jars/servlet-api-2.5.jar $systemlib
-
-cp $srcPath/KamanjaData/target/scala-2.10/kamanjadata_2.10-0.1.0.jar $systemlib
 
 cp $ivyPath/cache/org.ow2.asm/asm-commons/jars/asm-commons-4.0.jar $systemlib
 cp $ivyPath/cache/org.scala-lang/scala-actors/jars/scala-actors-2.10.4.jar $systemlib
@@ -340,14 +339,14 @@ cp $ivyPath/cache/com.codahale.metrics/metrics-core/bundles/metrics-core-3.0.2.j
 cp $ivyPath/cache/org.json4s/json4s-ast_2.10/jars/json4s-ast_2.10-3.2.9.jar $systemlib
 cp $ivyPath/cache/io.spray/spray-testkit/jars/spray-testkit-1.3.1.jar $systemlib
 
-cp $srcPath/Storage/Cassandra/target/scala-2.10/*.jar $systemlib
-cp $srcPath/Storage/HashMap/target/scala-2.10/*.jar $systemlib
-cp $srcPath/Storage/HBase/target/scala-2.10/*.jar $systemlib
-cp $srcPath/Storage/Redis/target/scala-2.10/*.jar $systemlib
+#cp $srcPath/Storage/Cassandra/target/scala-2.10/*.jar $systemlib
+#cp $srcPath/Storage/HashMap/target/scala-2.10/*.jar $systemlib
+#cp $srcPath/Storage/HBase/target/scala-2.10/*.jar $systemlib
+#cp $srcPath/Storage/Redis/target/scala-2.10/*.jar $systemlib
 cp $srcPath/Storage/StorageBase/target/scala-2.10/storagebase_2.10-1.0.jar $systemlib
 cp $srcPath/Storage/StorageManager/target/scala-2.10/*.jar $systemlib
-cp $srcPath/Storage/TreeMap/target/scala-2.10/*.jar $systemlib
-cp $srcPath/Storage/Voldemort/target/scala-2.10/*.jar $systemlib
+#cp $srcPath/Storage/TreeMap/target/scala-2.10/*.jar $systemlib
+#cp $srcPath/Storage/Voldemort/target/scala-2.10/*.jar $systemlib
 cp $srcPath/InputOutputAdapters/InputOutputAdapterBase/target/scala-2.10/*.jar $systemlib
 cp $srcPath/KamanjaUtils/target/scala-2.10/kamanjautils_2.10-1.0.jar $systemlib
 cp $srcPath/SecurityAdapters/SecurityAdapterBase/target/scala-2.10/*.jar $systemlib

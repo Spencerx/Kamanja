@@ -134,22 +134,28 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
           }
         }
 
-        kamanjaCallerCtxt.envCtxt.removeCommittedKey(transId, uk)
+        // kamanjaCallerCtxt.envCtxt.removeCommittedKey(transId, uk)
         LOG.info(ManagerUtils.getComponentElapsedTimeStr("SendResults", uv, readTmNanoSecs, sendOutStartTime))
 
+        /*
         if (containerData != null && containerData.size > 0) {
           val datachangedata = ("txnid" -> transId.toString) ~
             ("changeddatakeys" -> containerData.map(kv =>
               ("C" -> kv._1) ~
-                ("K" -> kv._2)))
+                ("K" -> kv._2.map(k =>
+                  ("tm" -> k._1) ~
+                    ("bk" -> k._2) ~
+                    ("tx" -> k._3)))))
           val sendJson = compact(render(datachangedata))
           // Do we need to log this?
           KamanjaLeader.SetNewDataToZkc(KamanjaConfiguration.zkNodeBasePath + "/datachange", sendJson.getBytes("UTF8"))
         }
+*/
       }
     } catch {
       case e: Exception => {
-        LOG.error("Failed to serialize uniqueKey/uniqueVal. Reason:%s Message:%s".format(e.getCause, e.getMessage))
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.error("Failed to serialize uniqueKey/uniqueVal. Reason:%s Message:%s. StackTrace:%s".format(e.getCause, e.getMessage, stackTrace))
       }
     }
   }
@@ -293,7 +299,8 @@ class ValidateExecCtxtImpl(val input: InputAdapter, val curPartitionKey: Partiti
       }
     } catch {
       case e: Exception => {
-        LOG.error("Failed to serialize uniqueKey/uniqueVal. Reason:%s Message:%s".format(e.getCause, e.getMessage))
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.error("Failed to serialize uniqueKey/uniqueVal. Reason:%s Message:%s. StackTrace:%s".format(e.getCause, e.getMessage, stackTrace))
       }
     }
   }

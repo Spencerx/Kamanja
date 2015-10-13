@@ -24,6 +24,8 @@ import org.apache.log4j.Logger
 import com.ligadata.Exceptions.StackTrace
 
 import scala.collection.mutable.{ ArrayBuffer }
+import org.json4s.jackson.Serialization
+import scala.collection.JavaConverters._
 
 class OutputMsgGenerator {
 
@@ -320,6 +322,15 @@ class OutputMsgGenerator {
     if (v.isInstanceOf[ArrayBuffer[_]]) {
       return v.asInstanceOf[ArrayBuffer[_]].mkString(delimiter)
     }
+    if (v.isInstanceOf[Map[_, _]]) {
+      implicit val formats = org.json4s.DefaultFormats
+      return Serialization.write(v.asInstanceOf[Map[String, _]])
+    }
+    if (v.isInstanceOf[java.util.Map[_, _]]) {
+      implicit val formats = org.json4s.DefaultFormats
+      return Serialization.write(v.asInstanceOf[java.util.Map[String, _]].asScala)
+    }
+
     v.toString
   }
 

@@ -60,6 +60,7 @@ class BaseTypesHandler {
     var prevObjTypNotMatchDeserializedBuf = new StringBuilder(8 * 1024)
     var prevVerMsgBaseTypesIdxArry1: ArrayBuffer[String] = new ArrayBuffer[String]
     var fixedMsgGetKeyStrBuf = new StringBuilder(8 * 1024)
+    var getNativeKeyValues = new StringBuilder(8 * 1024)
 
     var withMethod = new StringBuilder(8 * 1024)
     var fromFuncBaseTypesBuf = new StringBuilder(8 * 1024)
@@ -95,7 +96,7 @@ class BaseTypesHandler {
 
       if (fixed.toLowerCase().equals("true")) {
 
-        if (f.Name.toLowerCase().equals(transactionid)) {
+        if (f.SystemField) {
           scalaclass = scalaclass.append("")
           withMethod = withMethod.append("")
 
@@ -109,6 +110,8 @@ class BaseTypesHandler {
           withMethod = withMethod.append("%s%s def with%s(value: %s) : %s = {%s".format(newline, pad1, f.Name, typ.get.typeString, msg.Name, newline))
           withMethod = withMethod.append("%s this.%s = value %s".format(pad1, f.Name, newline))
           withMethod = withMethod.append("%s return this %s %s } %s".format(pad1, newline, pad1, newline))
+          getNativeKeyValues = getNativeKeyValues.append("%s keyValues(\"%s\") = (\"%s\", %s); %s".format(pad1, f.Name, f.NativeName, f.Name, newline))
+
         }
 
       } else if (fixed.toLowerCase().equals("false")) {
@@ -129,7 +132,7 @@ class BaseTypesHandler {
         }
 
         keysStr.append("(\"" + f.Name + "\", " + mappedTypesABuf.indexOf(typstring) + "),")
-        if (f.Name.toLowerCase().equals(transactionid)) {
+        if (f.SystemField) {
           withMethod = withMethod.append("")
 
         } else {
@@ -152,6 +155,10 @@ class BaseTypesHandler {
       fixedMsgGetKeyStrBuf.append("%s if(key.equals(\"%s\")) return %s; %s".format(pad1, f.Name, f.Name, newline))
       fromFuncBaseTypesBuf.append(fromFunc(typ, fixed, f, baseTypId))
 
+      var nativeKeyMap: String = "";
+      if (!f.Name.equalsIgnoreCase(transactionid)) {
+        nativeKeyMap = "(\"%s\", \"%s\"), ".format(f.Name, f.NativeName)
+      }
       returnAB += scalaclass.toString
       returnAB += assignCsvdata.toString
       returnAB += assignJsondata.toString
@@ -170,6 +177,8 @@ class BaseTypesHandler {
       returnAB += withMethod.toString
       returnAB += fromFuncBaseTypesBuf.toString
       returnAB += assignKvData.toString
+      returnAB += nativeKeyMap.toString
+      returnAB += getNativeKeyValues.toString
 
     } catch {
       case e: Exception => {
@@ -245,7 +254,6 @@ class BaseTypesHandler {
           if (mappedMsgBaseTypeIdx != -1)
             deserializedBuf = deserializedBuf.append("%s case %s => fields(key) = (typIdx, %s(dis));%s".format(pad1, mappedMsgBaseTypeIdx, deserType, newline))
 
-          //deserializedBuf = deserializedBuf.append("%sset(\"%s\" , %s(%s));%s".format(pad1, f.Name, deserType, dis, newline))
         }
       }
 

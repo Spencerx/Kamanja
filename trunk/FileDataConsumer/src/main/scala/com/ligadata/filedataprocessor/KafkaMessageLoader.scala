@@ -5,7 +5,7 @@ import java.nio.file.StandardCopyOption._
 import java.nio.file.{Paths, Files}
 import java.util.Properties
 
-import com.ligadata.Exceptions.{InternalErrorException, UnsupportedObjectException, MsgCompilationFailedException, StackTrace}
+import com.ligadata.Exceptions._
 import com.ligadata.KamanjaBase._
 import com.ligadata.MetadataAPI.MetadataAPIImpl
 import com.ligadata.Utils.{Utils, KamanjaLoaderInfo}
@@ -24,6 +24,8 @@ class KafkaMessageLoader(partIdx: Int , inConfiguration: scala.collection.mutabl
   var lastOffsetProcessed: Int = 0
   lazy val loggerName = this.getClass.getName
   lazy val logger = Logger.getLogger(loggerName)
+
+  private var fileCache: scala.collection.mutable.Set[String] = scala.collection.mutable.Set[String]()
 
   // Set up some properties for the Kafka Producer
   val props = new Properties()
@@ -51,6 +53,7 @@ class KafkaMessageLoader(partIdx: Int , inConfiguration: scala.collection.mutabl
   def pushData(messages: Array[KafkaMessage]): Unit = {
     // First, if we are handling failover, then the messages could be of size 0.
     logger.debug("SMART FILE CONSUMER **** processing "+messages.size+"messages")
+    println("SMART FILE CONSUMER **** processing "+messages.size+"messages")
     if (messages.size == 0) return
 
     // If we start processing a new file, then mark so in the zk.
@@ -63,51 +66,108 @@ class KafkaMessageLoader(partIdx: Int , inConfiguration: scala.collection.mutabl
     messages.foreach(msg => {
       // Now, there are some special cases here.  If offset is -1, then its just a signal to close the file
       // else, this may or may not be the last message in the file... look to isLast for guidance.
-      if(msg.offsetInFile > 0) {
-        var inputData =  CreateKafkaInput(new String(msg.msg), SmartFileAdapterConstants.MESSAGE_NAME, delimiters)
+      try {
+        if (!msg.isLastDummy) {
+          var inputData = CreateKafkaInput(new String(msg.msg), SmartFileAdapterConstants.MESSAGE_NAME, delimiters)
+          logger.debug(partIdx + " SMART FILE CONSUMER \nKafkaMessage:\n  File: " + msg.relatedFileName + ", offset:  " + msg.offsetInFile + " Message Partition ID is " +
+            objInst.asInstanceOf[MessageContainerObjBase].PartitionKeyData(inputData).mkString + "\n " + new String(msg.msg))
+          try {
+            //if ( msg.offsetInFile > 1) throw new Exception("FUKCYEAH")
+            producer.send(new KeyedMessage(inConfiguration(SmartFileAdapterConstants.KAFKA_TOPIC),
+              objInst.asInstanceOf[MessageContainerObjBase].PartitionKeyData(inputData).mkString.getBytes("UTF8"),
+              new String(msg.msg).getBytes("UTF8")))
 
-        logger.debug(partIdx +" SMART FILE CONSUMER \nKafkaMessage:\n  File: " + msg.relatedFileName+", offset:  "+ msg.offsetInFile + " Message Partition ID is "+
-                     objInst.asInstanceOf[MessageContainerObjBase].PartitionKeyData(inputData).mkString + "\n " + new String(msg.msg))
-        try {
-          //if ( msg.offsetInFile > 1) throw new Exception("FUKCYEAH")
-          producer.send(new KeyedMessage(inConfiguration(SmartFileAdapterConstants.KAFKA_TOPIC),
-            objInst.asInstanceOf[MessageContainerObjBase].PartitionKeyData(inputData).mkString.getBytes("UTF8"),
-            new String(msg.msg).getBytes("UTF8")))
-
-          val zkFname = "{" + "\""+fileBeingProcessing+ "\":" + msg.offsetInFile + "}"
-          zkc.setData.forPath(znodePath, zkFname.getBytes)
-        } catch {
-          case e: Exception =>
-            logger.error(partIdx +" Could not add to the queue due to an Exception "+ e.getMessage)
-            e.printStackTrace
-            shutdown
-            throw e
-        }
-      }
-
-      if (msg.isLast) {
-        try {
-          // Either move or rename the file.
-          var fileStruct = msg.relatedFileName.split("/")
-          if (inConfiguration.getOrElse(SmartFileAdapterConstants.DIRECTORY_TO_MOVE_TO, null) != null) {
-            logger.debug(partIdx +" SMART FILE CONSUMER Moving File" + msg.relatedFileName + " to "+ inConfiguration(SmartFileAdapterConstants.DIRECTORY_TO_MOVE_TO))
-            Files.copy(Paths.get(msg.relatedFileName), Paths.get(inConfiguration(SmartFileAdapterConstants.DIRECTORY_TO_MOVE_TO)+"/"+ fileStruct(fileStruct.size - 1)),REPLACE_EXISTING)
-            Files.deleteIfExists(Paths.get(msg.relatedFileName))
-          } else {
-            logger.debug(partIdx +" SMART FILE CONSUMER Renaming file "+ msg.relatedFileName + " to " + msg.relatedFileName + "_COMPLETE")
-            (new File(msg.relatedFileName)).renameTo(new File(msg.relatedFileName + "_COMPLETE"))
+            println(new String(msg.msg) + " SUCCESS ")
+            val zkFname = "{" + "\"" + fileBeingProcessing + "\":" + msg.offsetInFile + "}"
+            zkc.setData.forPath(znodePath, zkFname.getBytes)
+          } catch {
+            case e: Exception =>
+              logger.error(partIdx + " Could not add to the queue due to an Exception " + e.getMessage)
+              e.printStackTrace
+              shutdown
+              throw e
           }
+        }
 
-          // Remove reference to this file from Zookeeper - this file is done and will not be replayed
-          //
-          // SetData in Zookeeper... set null...
-          zkc.setData.forPath(znodePath, null)
-        } catch {
-          case ioe: IOException => ioe.printStackTrace()
+        if (msg.isLast) {
+          // output the status message to the KAFAKA_STATUS_TOPIC
+          writeStatusMsg(msg)
+          closeOutFile(msg)
+        }
+      } catch {
+        case mfe: KVMessageFormatingException => {
+          writeErrorMsg(msg)
+          writeStatusMsg(msg)
+          closeOutFile(msg)
+
         }
       }
-
     })
+  }
+
+  /**
+   *
+   * @param msg
+   */
+  private def closeOutFile (msg: KafkaMessage): Unit = {
+    try {
+      // Either move or rename the file.
+      var fileStruct = msg.relatedFileName.split("/")
+      if (inConfiguration.getOrElse(SmartFileAdapterConstants.DIRECTORY_TO_MOVE_TO, null) != null) {
+        logger.debug(partIdx + " SMART FILE CONSUMER Moving File" + msg.relatedFileName + " to " + inConfiguration(SmartFileAdapterConstants.DIRECTORY_TO_MOVE_TO))
+        Files.copy(Paths.get(msg.relatedFileName), Paths.get(inConfiguration(SmartFileAdapterConstants.DIRECTORY_TO_MOVE_TO) + "/" + fileStruct(fileStruct.size - 1)), REPLACE_EXISTING)
+        Files.deleteIfExists(Paths.get(msg.relatedFileName))
+      } else {
+        logger.debug(partIdx + " SMART FILE CONSUMER Renaming file " + msg.relatedFileName + " to " + msg.relatedFileName + "_COMPLETE")
+        (new File(msg.relatedFileName)).renameTo(new File(msg.relatedFileName + "_COMPLETE"))
+      }
+      fileCache.remove(msg.relatedFileName)
+      // Remove reference to this file from Zookeeper - this file is done and will not be replayed
+      //
+      // SetData in Zookeeper... set null...
+      clearRecoveryArea
+    } catch {
+      case ioe: IOException => ioe.printStackTrace()
+    }
+  }
+
+  /**
+   *
+   * @param msg
+   */
+  private def writeStatusMsg(msg: KafkaMessage): Unit = {
+    try {
+      if (inConfiguration.getOrElse(SmartFileAdapterConstants.KAFKA_STATUS_TOPIC, "").length > 0) {
+        var statusMsg = "processed " + msg.relatedFileName + " with " + msg.offsetInFile + " events"
+        var statusPartitionId = "it does not matter"
+        producer.send(new KeyedMessage(inConfiguration(SmartFileAdapterConstants.KAFKA_STATUS_TOPIC),
+          statusPartitionId.getBytes("UTF8"),
+          new String(statusMsg).getBytes("UTF8")))
+        println("Status pushed ->" + statusMsg)
+        logger.debug("Status pushed ->" + statusMsg)
+      } else {
+        println("NO STATUS Q SPECIFIED")
+        logger.debug("NO STATUS Q SPECIFIED")
+      }
+    } catch {
+      case e: Exception => {
+        logger.warn(partIdx + " SMART FILE CONSUMER: Unable to exgernalize status message")
+        e.printStackTrace()
+      }
+    }
+  }
+
+  /**
+   *
+   * @param msg
+   */
+  private def writeErrorMsg (msg:KafkaMessage) : Unit = {
+    var errorMsg = (new String(msg.msg)) + " - " + msg.relatedFileName
+    logger.warn(partIdx + " SMART FILE CONSUMER: invalid message in file "+ msg.relatedFileName)
+    println(partIdx + " SMART FILE CONSUMER: invalid message in file "+ msg.relatedFileName)
+    producer.send(new KeyedMessage(inConfiguration(SmartFileAdapterConstants.KAFKA_ERROR_TOPIC),
+      "rare event".getBytes("UTF8"),
+      errorMsg.getBytes("UTF8")))
   }
 
   /**
@@ -135,8 +195,7 @@ class KafkaMessageLoader(partIdx: Int , inConfiguration: scala.collection.mutabl
       if (str_arr.size % 2 != 0) {
         val errStr = "Expecting Key & Value pairs are even number of tokens when FieldDelimiter & KeyAndValueDelimiter are matched. We got %d tokens from input string %s".format(str_arr.size, inputData)
         logger.error(errStr)
-        shutdown
-        throw new Exception(errStr)
+        throw new KVMessageFormatingException(errStr)
       }
       for (i <- 0 until str_arr.size by 2) {
         dataMap(str_arr(i).trim) = str_arr(i + 1)
@@ -145,8 +204,7 @@ class KafkaMessageLoader(partIdx: Int , inConfiguration: scala.collection.mutabl
       str_arr.foreach(kv => {
         val kvpair = kv.split(delimiters.keyAndValueDelimiter)
         if (kvpair.size != 2) {
-          shutdown
-          throw new Exception("Expecting Key & Value pair only")
+          throw new KVMessageFormatingException("Expecting Key & Value pair only")
         }
         dataMap(kvpair(0).trim) = kvpair(1)
       })
@@ -251,6 +309,27 @@ class KafkaMessageLoader(partIdx: Int , inConfiguration: scala.collection.mutabl
       }
     })
     return null
+  }
+
+  /**
+   * checkIfFileBeingProcessed - if for some reason a file name is queued twice... this will prevent it
+   * @param file
+   * @return
+   */
+  def checkIfFileBeingProcessed (file: String): Boolean = {
+    if (fileCache.contains(file))
+      return true
+    else {
+      fileCache.add(file)
+      return false
+    }
+  }
+
+  def clearRecoveryArea: Unit = {
+    if (zkc != null)
+      zkc.setData.forPath(znodePath, null)
+    else
+      logger.warn("SMART_FILE_CONSUMER " + partIdx + " Unable to connect to Zookeeper")
   }
 
   /**

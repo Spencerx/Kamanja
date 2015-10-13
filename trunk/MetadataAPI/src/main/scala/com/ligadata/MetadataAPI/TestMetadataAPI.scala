@@ -21,7 +21,8 @@ import java.io.{ ByteArrayOutputStream, _ }
 import com.esotericsoftware.kryo.io.{ Input, Output }
 import com.ligadata.Serialize._
 import com.ligadata.ZooKeeper._
-import com.ligadata.StorageBase.{ DataStore, Transaction, IStorage, Key, Value, StorageAdapterObj }
+import com.ligadata.KvBase.{ Key, Value, TimeRange }
+import com.ligadata.StorageBase.{ DataStore, Transaction }
 import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadataload.MetadataLoad
 import com.twitter.chill.ScalaKryoInstantiator
@@ -2269,11 +2270,11 @@ println("Getting Messages")
     }
   }
 
-  def testSaveObject(key: String, value: String, store: DataStore) {
+  def testSaveObject(key: String, value: String, storeType: String) {
     val serializer = SerializerManager.GetSerializer("kryo")
     var ba = serializer.SerializeObjectToByteArray(value)
     try {
-      MetadataAPIImpl.UpdateObject(key, ba, store)
+      MetadataAPIImpl.UpdateObject(key, ba, storeType, "kryo")
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -2285,17 +2286,17 @@ println("Getting Messages")
   def testDbOp {
     try {
       val serializer = SerializerManager.GetSerializer("kryo")
-      testSaveObject("key1", "value1", MetadataAPIImpl.oStore)
-      var obj = MetadataAPIImpl.GetObject("key1", MetadataAPIImpl.oStore)
-      var v = serializer.DeserializeObjectFromByteArray(obj.Value.toArray[Byte]).asInstanceOf[String]
+      testSaveObject("key1", "value1", "other")
+      var obj = MetadataAPIImpl.GetObject("key1", "other")
+      var v = serializer.DeserializeObjectFromByteArray(obj.serializedInfo).asInstanceOf[String]
       assert(v == "value1")
-      testSaveObject("key1", "value2", MetadataAPIImpl.oStore)
-      obj = MetadataAPIImpl.GetObject("key1", MetadataAPIImpl.oStore)
-      v = serializer.DeserializeObjectFromByteArray(obj.Value.toArray[Byte]).asInstanceOf[String]
+      testSaveObject("key1", "value2", "other")
+      obj = MetadataAPIImpl.GetObject("key1", "other")
+      v = serializer.DeserializeObjectFromByteArray(obj.serializedInfo).asInstanceOf[String]
       assert(v == "value2")
-      testSaveObject("key1", "value3", MetadataAPIImpl.oStore)
-      obj = MetadataAPIImpl.GetObject("key1", MetadataAPIImpl.oStore)
-      v = serializer.DeserializeObjectFromByteArray(obj.Value.toArray[Byte]).asInstanceOf[String]
+      testSaveObject("key1", "value3", "other")
+      obj = MetadataAPIImpl.GetObject("key1", "other")
+      v = serializer.DeserializeObjectFromByteArray(obj.serializedInfo).asInstanceOf[String]
       assert(v == "value3")
     } catch {
       case e: Exception => {

@@ -119,6 +119,7 @@ object KamanjaLeader {
   }
 
   private def SendUnSentInfoToOutputAdapters: Unit = lock.synchronized {
+  /*
     // LOG.info("SendUnSentInfoToOutputAdapters -- envCtxt:" + envCtxt + ", outputAdapters:" + outputAdapters)
     if (envCtxt != null && outputAdapters != null) {
       // Information found in Committing list
@@ -182,9 +183,10 @@ object KamanjaLeader {
           }
         })
         // Remove after sending again 
-        envCtxt.removeCommittedKeys(keys)
+        // envCtxt.removeCommittedKeys(keys)
       }
     }
+*/
   }
 
   private def UpdatePartitionsNodeData(eventType: String, eventPath: String, eventPathData: Array[Byte]): Unit = lock.synchronized {
@@ -207,7 +209,7 @@ object KamanjaLeader {
               if (nodesStatus.size == curParticipents.size && expectedNodesAction == "stopped" && (nodesStatus -- curParticipents).isEmpty) {
                 // Send the data to output queues in case if anything not sent before
                 SendUnSentInfoToOutputAdapters
-                envCtxt.PersistRemainingStateEntriesOnLeader
+                // envCtxt.PersistRemainingStateEntriesOnLeader
                 nodesStatus.clear
                 expectedNodesAction = "distributed"
 
@@ -612,7 +614,7 @@ object KamanjaLeader {
               if (distributionExecutor.isShutdown)
                 break
 
-              envCtxt.PersistLocalNodeStateEntries
+              // envCtxt.PersistLocalNodeStateEntries
               envCtxt.clearIntermediateResults
 
               // Set STOPPED action in adaptersStatusPath + "/" + nodeId path
@@ -745,17 +747,23 @@ object KamanjaLeader {
               val contAndKeys = CK.asInstanceOf[Map[String, Any]]
               val contName = contAndKeys.getOrElse("C", "").toString.trim
               val tmpKeys = contAndKeys.getOrElse("K", null)
+/*
               if (contName.size > 0 && tmpKeys != null) {
                 // Expecting List/Array of Keys
-                var keys: List[List[String]] = null
+                var keys: List[(String, Any)] = null
                 if (tmpKeys.isInstanceOf[List[_]]) {
                   try {
-                    keys = tmpKeys.asInstanceOf[List[List[String]]]
+                    keys = tmpKeys.asInstanceOf[List[(String, Any)]]
                   }
                 }
-                if (tmpKeys.isInstanceOf[Array[_]]) {
+                else if (tmpKeys.isInstanceOf[Array[_]]) {
                   try {
-                    keys = tmpKeys.asInstanceOf[Array[List[String]]].toList
+                    keys = tmpKeys.asInstanceOf[Array[(String, Any)]].toList
+                  }
+                }
+                else if (tmpKeys.isInstanceOf[Map[_, _]]) {
+                  try {
+                    keys = tmpKeys.asInstanceOf[Map[String, Any]]
                   }
                 }
 
@@ -773,6 +781,7 @@ object KamanjaLeader {
                   }
                 }
               }
+*/
             } // else // not handling
           })
         }

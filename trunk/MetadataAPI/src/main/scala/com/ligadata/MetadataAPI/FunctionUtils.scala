@@ -37,7 +37,8 @@ import com.ligadata.kamanja.metadataload.MetadataLoad
 
 // import com.ligadata.keyvaluestore._
 import com.ligadata.HeartBeat.HeartBeatUtil
-import com.ligadata.StorageBase.{ DataStore, Transaction, IStorage, Key, Value, StorageAdapterObj }
+import com.ligadata.StorageBase.{ DataStore, Transaction }
+import com.ligadata.KvBase.{ Key, Value, TimeRange }
 
 import scala.util.parsing.json.JSON
 import scala.util.parsing.json.{ JSONObject, JSONArray }
@@ -82,9 +83,6 @@ object FunctionUtils {
   lazy val logger = Logger.getLogger(loggerName)
   lazy val serializer = SerializerManager.GetSerializer("kryo")
   
-  private var functionStore: DataStore = MetadataAPIImpl.GetFunctionStore
-  private var jarStore: DataStore = MetadataAPIImpl.GetJarStore
-
   def AddFunction(functionDef: FunctionDef): String = {
     val key = functionDef.FullNameWithVer
     val dispkey = functionDef.FullName + "." + MdMgr.Pad0s2Version(functionDef.Version)
@@ -236,7 +234,7 @@ object FunctionUtils {
         val f = new File(jarName)
         if (!f.exists()) {  
           try {
-            val mObj = MetadataAPIImpl.GetObject(jar, jarStore)
+            val mObj = MetadataAPIImpl.GetObject(jar, "jar_store")
             // Nothing to do after getting the object.
           } catch {
             case e: Exception => {
@@ -350,8 +348,8 @@ object FunctionUtils {
 
   def LoadFunctionIntoCache(key: String) {
     try {
-      val obj = MetadataAPIImpl.GetObject(key.toLowerCase, functionStore)
-      val cont = serializer.DeserializeObjectFromByteArray(obj.Value.toArray[Byte])
+      val obj = MetadataAPIImpl.GetObject(key.toLowerCase, "functions")
+      val cont = serializer.DeserializeObjectFromByteArray(obj.serializedInfo)
       MetadataAPIImpl.AddObjectToCache(cont.asInstanceOf[FunctionDef], MdMgr.GetMdMgr)
     } catch {
       case e: Exception => {

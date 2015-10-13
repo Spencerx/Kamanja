@@ -25,13 +25,14 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.reflect.{ classTag, ClassTag }
 import com.ligadata.Exceptions._
-import com.ligadata.KamanjaBase.api.java.function.{Function1 => JFunction1, FlatMapFunction1 => JFlatMapFunction1, PairFunction => JPairFunction}
+import com.ligadata.KamanjaBase.api.java.function.{ Function1 => JFunction1, FlatMapFunction1 => JFlatMapFunction1, PairFunction => JPairFunction }
 import com.google.common.base.Optional
 import com.ligadata.Utils.Utils
 import java.util.{ Comparator, List => JList, Iterator => JIterator }
 import java.lang.{ Iterable => JIterable, Long => JLong }
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import com.ligadata.KvBase.{ Key, Value, TimeRange }
 
 object ThreadLocalStorage {
   final val modelContextInfo = new ThreadLocal[ModelContext]();
@@ -48,13 +49,6 @@ import KamanjaUtils._
 class Stats {
   // # of Rows, Total Size of the data, Avg Size, etc
 }
-
-object TimeRange {
-  // Time Range Methods like 30days ago, current date, week ago, adjusting partition to week, month or year, etc
-}
-
-// startTime & endTime are in the format of YYYYMMDDHH
-case class TimeRange(startTime: Int, endTime: Int) {}
 
 // RDD traits/classes
 /**
@@ -207,7 +201,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])(implicit kt: ClassTag[K], vt: Cl
 }
 
 /**
- * RDD This is a scala Object. Used as a factory class to create scala RDD objects to 
+ * RDD This is a scala Object. Used as a factory class to create scala RDD objects to
  */
 object RDD {
   implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])(implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDFunctions[K, V] = {
@@ -217,7 +211,7 @@ object RDD {
   /**
    * Create an RDD of type [T] from a given array
    * @param values Array[T]
-   * @return RDD[T] 
+   * @return RDD[T]
    */
   def makeRDD[T](values: Array[T]): RDD[T] = {
     val newrdd = new RDD[T]()(ClassTag.AnyRef.asInstanceOf[ClassTag[T]])
@@ -227,22 +221,22 @@ object RDD {
 }
 
 /**
- * RDD - One of the basic classes for Kamanja development.  It is basically a collection of individual scala RDDObjects.  If you are working with Java, 
- * JavaRDD will support the same nethod.  
- * 
+ * RDD - One of the basic classes for Kamanja development.  It is basically a collection of individual scala RDDObjects.  If you are working with Java,
+ * JavaRDD will support the same nethod.
+ *
  * Note that  calling toJavaRDD on any RDD[Object] will return a JavaRDD[T]
  */
 class RDD[T: ClassTag] {
   private val collection = ArrayBuffer[T]()
   private[KamanjaBase] def Collection = collection
   private val LOG = Logger.getLogger(getClass);
- 
+
   /**
    * Return the underlying iterator for this RDD
    * @return Iterator[T]
    */
   def iterator: Iterator[T] = collection.iterator
-  
+
   /**
    * Return the classTag
    */
@@ -262,11 +256,11 @@ class RDD[T: ClassTag] {
   /**
    * Return a new RDD by applying a function to all elements of this RDD, and selecting only
    * those elements that satisfy the provided time range
-   * 
-   * @param tmRange TimeRange 
-   * @param f T => U 
+   *
+   * @param tmRange TimeRange
+   * @param f T => U
    * @return new RDD[U]
-   */  
+   */
   def map[U: ClassTag](tmRange: TimeRange, f: T => U): RDD[U] = {
     val newrdd = new RDD[U]()
     // BUGBUG:: Yet to implement filtering tmRange
@@ -276,7 +270,7 @@ class RDD[T: ClassTag] {
 
   /**
    * Return a new RDD by first applying a function to all elements of this RDD, and then flattening the results.
-   * @param f T => U 
+   * @param f T => U
    * @return new  RDD[U]
    */
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = {
@@ -296,13 +290,12 @@ class RDD[T: ClassTag] {
     newrdd
   }
 
-  
   /**
    * Return a new RDD containing only the elements that satisfy a predicate, and a provided timerRange
    * @param tmRange TimeRange
    * @param f T => Boolean
    * @return new RDD[T]
-   */ 
+   */
   def filter(tmRange: TimeRange, f: T => Boolean): RDD[T] = {
     val newrdd = new RDD[T]()
     // BUGBUG:: Yet to implement filtering tmRange
@@ -311,7 +304,7 @@ class RDD[T: ClassTag] {
   }
 
   /**
-   * Return the union of this RDD and another one. 
+   * Return the union of this RDD and another one.
    * @param other RDD[T]
    * @return new RDD[T]
    */
@@ -329,7 +322,6 @@ class RDD[T: ClassTag] {
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
   // def sortBy[K](f: (T) => K, ascending: Boolean = true) (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] = this.keyBy[K](f).sortByKey(ascending, numPartitions).values
-
 
   /**
    * Return the intersection of this RDD and another one.
@@ -553,8 +545,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] {
   def isEmpty(): Boolean = rdd.isEmpty()
 }
 
-
-
 /**
  *  JavaRDD is a collection of JavaRDDObjects.  It is provided ot enable developers to write code to interface with Kamanja runtime engine
  */
@@ -567,8 +557,8 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * @see RDD[T]
    */
   def filter(f: JFunction1[T, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rdd.filter((x => f.call(x).booleanValue())))
- 
-   /**
+
+  /**
    * @see RDD[T]
    */
   def filter(tmRange: TimeRange, f: JFunction1[T, java.lang.Boolean]) = wrapRDD(rdd.filter(tmRange, (x => f.call(x).booleanValue())))
@@ -590,7 +580,6 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
 
   // def sortBy[S](f: JFunction1[T, S], ascending: Boolean): JavaRDD[T]
 }
-
 
 /**
  * A static class to use for working with JavaPairRDD objects.
@@ -616,18 +605,17 @@ object JavaPairRDD {
 
   implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
 
-  /** 
-   *  Convert a JavaRDD of key-value pairs to JavaPairRDD. 
+  /**
+   *  Convert a JavaRDD of key-value pairs to JavaPairRDD.
    *  @param rdd JavaRDD[(K, V)]
    *  @return JavaPairRDD[K, V]
-   *  */
+   */
   def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[V] = fakeClassTag
     new JavaPairRDD[K, V](rdd.rdd)
   }
 }
-
 
 /**
  *  A Key-Value implementation for a JavaRDDs.
@@ -668,7 +656,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K
   // def join[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, W)]
 }
 
-
 /**
  * An instance object that represents either an individual Container or an individual Message in Kamanja
  */
@@ -682,20 +669,20 @@ abstract class RDDObject[T: ClassTag] {
    * @return T
    */
   def build: T
-  
+
   /**
    * Implemented by an actual Message or Container class that is generated during message/container deployment
    * @param from T
    * @return T
    */
   def build(from: T): T
-  
+
   /**
    * Implemented by an actual Message or Container class that is generated during message/container deployment
    * @return String
    */
   def getFullName: String // Gets Message/Container Name
-  
+
   /**
    * Implemented by an actual Message or Container class that is generated during message/container deployment
    * @return JavaRDDObject[T]
@@ -712,7 +699,7 @@ abstract class RDDObject[T: ClassTag] {
   /**
    * First group of functions retrieve one object (either recent or for a given key & filter)
    * Get recent entry for the Current Key
-   * 
+   *
    * @return Option[T]
    */
   final def getRecent: Option[T] = {
@@ -728,7 +715,7 @@ abstract class RDDObject[T: ClassTag] {
   /**
    * Get recent entry or if recent entry not present, return a new entry.  WARNING.. THIS IS DANGEROUS this can easily run your application out of storage
    * if there are many messages in the history storage.
-   * 
+   *
    * @return T
    */
   final def getRecentOrNew: T = {
@@ -740,7 +727,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Get the latest RDDObject with a given key.  This will search within the model context.
-   * 
+   *
    * @param key Array[String]
    * @return Option[T]
    */
@@ -756,7 +743,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Get recent entry or if recent entry not present, return a new entry.
-   * 
+   *
    * @param key Array[String]
    * @return T
    */
@@ -768,7 +755,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Find an entry for the given key.
-   * 
+   *
    * @param tmRange TimeRange
    * @param f MessageContainerBase => Boolean
    * @return Option[T]
@@ -785,7 +772,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Find an entry for the given key or return a new one.
-   * 
+   *
    * @param tmRange TimeRange
    * @param f MessageContainerBase => Boolean
    * @return T
@@ -798,7 +785,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Find an entry for the given key.
-   * 
+   *
    * @param key Array[String]
    * @param tmRange: TimeRange
    * @param f MessageContainerBase => Boolean
@@ -816,7 +803,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Find an entry for the given key or return a new one.
-   * 
+   *
    * @param key Array[String]
    * @param tmRange TimeRange
    * @param f MessageContainerBase => Boolean
@@ -830,7 +817,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * This group of functions retrieve collection of objects for a give key.  Key will be pulled from a model Context
-   * 
+   *
    * @param f MessageContainerBase => Boolean
    * @return RDD[T]
    */
@@ -847,7 +834,7 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Return a RDD for the current key. Key will be pulled from a model Context
-   * 
+   *
    * @param tmRange TimeRange
    * @return RDD[T]
    */
@@ -861,10 +848,10 @@ abstract class RDDObject[T: ClassTag] {
     }
     RDD.makeRDD(values)
   }
-  
+
   /**
    * Return a RDD for the current key. Key will be pulled from a model Context
-   * 
+   *
    * @param tmRange TimeRange
    * @param f MessageContainerBase => Boolean
    * @return RDD[T]
@@ -884,7 +871,7 @@ abstract class RDDObject[T: ClassTag] {
   /**
    * Return a RDD -- If the filtering parameters are not sufficiently strict, this method can return a very large amout of
    * RDDObjects, causing memory issues.
-   * 
+   *
    * @return RDD[T]
    */
   final def getRDD(): RDD[T] = {
@@ -900,8 +887,8 @@ abstract class RDDObject[T: ClassTag] {
 
   /**
    * Return a RDD- If the filtering parameters are not sufficiently strict, this method can return a very large amout of
-   * RDDObjects, causing memory issues.  
-   * 
+   * RDDObjects, causing memory issues.
+   *
    * @param tmRangeTimeRange
    * @param f MessageContainerBase => Boolean
    * @return RDD[T]
@@ -920,7 +907,7 @@ abstract class RDDObject[T: ClassTag] {
   /**
    * Return a RDD - If the filtering parameters are not sufficiently strict, this method can return a very large amout of
    * RDDObjects, causing memory issues.
-   * 
+   *
    * @param tmRangeTimeRange
    * @return RDD[T]
    */
@@ -938,7 +925,7 @@ abstract class RDDObject[T: ClassTag] {
   /**
    * Return a RDD - If the filtering parameters are not sufficiently strict, this method can return a very large amout of
    * RDDObjects, causing memory issues.
-   * 
+   *
    * @param f MessageContainerBase => Boolean
    * @return RDD[T]
    */
@@ -954,8 +941,8 @@ abstract class RDDObject[T: ClassTag] {
   }
 
   /**
-   * Return a RDD 
-   * 
+   * Return a RDD
+   *
    * @param key Array[String]
    * @param tmRange TimeRange
    * @param f MessageContainerBase => Boolean
@@ -973,8 +960,8 @@ abstract class RDDObject[T: ClassTag] {
   }
 
   /**
-   * Return a RDD 
-   * 
+   * Return a RDD
+   *
    * @param key Array[String]
    * @param f MessageContainerBase => Boolean
    * @return RDD[T]
@@ -989,10 +976,10 @@ abstract class RDDObject[T: ClassTag] {
     }
     RDD.makeRDD(values)
   }
-  
+
   /**
-   * Return a RDD 
-   * 
+   * Return a RDD
+   *
    * @param key Array[String]
    * @param tmRange TimeRange
    * @param f MessageContainerBase => Boolean
@@ -1010,8 +997,8 @@ abstract class RDDObject[T: ClassTag] {
   }
 
   /**
-   * Return a RDD 
-   * 
+   * Return a RDD
+   *
    * @param key Array[String]
    * @return RDD[T]
    */
@@ -1025,10 +1012,10 @@ abstract class RDDObject[T: ClassTag] {
     }
     RDD.makeRDD(values)
   }
-  
+
   /**
-   * Save a an RDDObject in the underlying history 
-   * 
+   * Save a an RDDObject in the underlying history
+   *
    * @param inst T
    */
   final def saveOne(inst: T): Unit = {
@@ -1040,8 +1027,8 @@ abstract class RDDObject[T: ClassTag] {
   }
 
   /**
-   * Save a an RDDObject in the underlying history 
-   * 
+   * Save a an RDDObject in the underlying history
+   *
    * @param key Array[String]
    * @param inst T
    */
@@ -1053,8 +1040,8 @@ abstract class RDDObject[T: ClassTag] {
   }
 
   /**
-   * Save a an RDDObject in the underlying history 
-   * 
+   * Save a an RDDObject in the underlying history
+   *
    * @param data Array[String]
    */
   final def saveRDD(data: RDD[T]): Unit = {
@@ -1078,23 +1065,23 @@ abstract class AbstractJavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]]
 
 /**
  * A trait that implements a number of methods to be accessible from the Java programming language.
- * 
- * Defines and implements same functionality as RDDObject but reuturn types are java Optional[T] instead of scal 
+ *
+ * Defines and implements same functionality as RDDObject but reuturn types are java Optional[T] instead of scal
  * Option[T] where appropriate
  */
 trait JavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]] {
   private val LOG = Logger.getLogger(getClass);
   private def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
-  
+
   /**
    * Return a JavaRDDObject implementation for a given rddObject[T]
    * @param rddObj RDDObject[T]
    * @return JavaRDDObject[T]
    */
   def wrapRDDObject(rddObj: RDDObject[T]): This
-  
+
   implicit val classTag: ClassTag[T]
-  
+
   /**
    * Return an uderlying RDDObject[T]
    * @return RDDObject[T]
@@ -1106,7 +1093,7 @@ trait JavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]] {
    * @see RDDObject
    */
   def build: T = rddObj.build
-  
+
   /**
    * @see RDDObject
    */
@@ -1118,9 +1105,9 @@ trait JavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]] {
    * @see RDDObject but returns a java Optional[T] instead of a scala Option[T]
    */
   def getRecent: Optional[T] = Utils.optionToOptional(rddObj.getRecent)
-  
+
   /**
-   * @see RDDObject 
+   * @see RDDObject
    */
   def getRecentOrNew: T = rddObj.getRecentOrNew
 
@@ -1129,9 +1116,9 @@ trait JavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]] {
    * @see RDDObject but returns a java Optional[T] instead of a scala Option[T]
    */
   def getRecent(key: Array[String]): Optional[T] = Utils.optionToOptional(rddObj.getRecent(key))
-  
+
   /**
-   * @see RDDObject 
+   * @see RDDObject
    */
   def getRecentOrNew(key: Array[String]): T = rddObj.getRecentOrNew(key)
 
@@ -1139,9 +1126,9 @@ trait JavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]] {
    * @see RDDObject but returns a java Optional[T] instead of a scala Option[T]
    */
   def getOne(tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): Optional[T] = Utils.optionToOptional(rddObj.getOne(tmRange, (x => f.call(x).booleanValue())))
-  
+
   /**
-   * @see RDDObject 
+   * @see RDDObject
    */
   def getOneOrNew(tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): T = rddObj.getOneOrNew(tmRange, (x => f.call(x).booleanValue()))
 
@@ -1149,92 +1136,91 @@ trait JavaRDDObjectLike[T, This <: JavaRDDObjectLike[T, This]] {
    * @see RDDObject but returns a java Optional[T] instead of a scala Option[T]
    */
   def getOne(key: Array[String], tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): Optional[T] = Utils.optionToOptional(rddObj.getOne(key, tmRange, (x => f.call(x).booleanValue())))
- 
+
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def getOneOrNew(key: Array[String], tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): T = rddObj.getOneOrNew(key, tmRange, (x => f.call(x).booleanValue()))
 
   // This group of functions retrieve collection of objects 
   /**
-   * @see RDDObject 
+   * @see RDDObject
    */
   def getRDDForCurrKey(f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = rddObj.getRDDForCurrKey((x => f.call(x).booleanValue()))
-  
+
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def getRDDForCurrKey(tmRange: TimeRange): JavaRDD[T] = rddObj.getRDDForCurrKey(tmRange)
-  
+
   /**
-   * @see RDDObject 
+   * @see RDDObject
    */
   def getRDDForCurrKey(tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = rddObj.getRDDForCurrKey(tmRange, (x => f.call(x).booleanValue()))
 
   // With too many messages, these may fail - mostly useful for message types where number of messages are relatively small 
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def getRDD(): JavaRDD[T] = wrapRDD(rddObj.getRDD())
-  
-  /**
-   * @see RDDObject 
-   */  
-  def getRDD(tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rddObj.getRDD(tmRange, {x: MessageContainerBase => f.call(x).booleanValue()}))
+
   /**
    * @see RDDObject
-   */  
-  def getRDD(tmRange: TimeRange): JavaRDD[T] = wrapRDD(rddObj.getRDD(tmRange))  
-  
+   */
+  def getRDD(tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rddObj.getRDD(tmRange, { x: MessageContainerBase => f.call(x).booleanValue() }))
   /**
    * @see RDDObject
-   */ 
+   */
+  def getRDD(tmRange: TimeRange): JavaRDD[T] = wrapRDD(rddObj.getRDD(tmRange))
+
+  /**
+   * @see RDDObject
+   */
   def getRDD(f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rddObj.getRDD((x => f.call(x).booleanValue())))
 
   /**
-   * @see RDDObject 
+   * @see RDDObject
    */
   def getRDD(key: Array[String], tmRange: TimeRange, f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rddObj.getRDD(key, tmRange, (x => f.call(x).booleanValue())))
-  
+
   /**
    * @see RDDObject
-   */  
-  def getRDD(key: Array[String], f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rddObj.getRDD(key, {x: MessageContainerBase => f.call(x).booleanValue()}))
-  
+   */
+  def getRDD(key: Array[String], f: JFunction1[MessageContainerBase, java.lang.Boolean]): JavaRDD[T] = wrapRDD(rddObj.getRDD(key, { x: MessageContainerBase => f.call(x).booleanValue() }))
+
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def getRDD(key: Array[String], tmRange: TimeRange): JavaRDD[T] = wrapRDD(rddObj.getRDD(key, tmRange))
-  
+
   /**
    * @see RDDObject
-   */  
+   */
   def getRDD(key: Array[String]): JavaRDD[T] = wrapRDD(rddObj.getRDD(key))
 
   // Saving data
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def saveOne(inst: T): Unit = rddObj.saveOne(inst)
-  
+
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def saveOne(key: Array[String], inst: T): Unit = rddObj.saveOne(key, inst)
 
   /**
-   * @see RDDObject 
-   */  
+   * @see RDDObject
+   */
   def saveRDD(data: RDD[T]): Unit = rddObj.saveRDD(data)
 }
-
 
 /**
  * This class actually implements the JavaRDDObjectLike, refer to that trait for doc
  */
 class JavaRDDObject[T](val rddObj: RDDObject[T])(implicit val classTag: ClassTag[T])
   extends AbstractJavaRDDObjectLike[T, JavaRDDObject[T]] {
-  
+
   /**
    * Return a JavaRDDObject implementation for a given rddObject[T]
    * @param rddObj RDDObject[T]
@@ -1247,14 +1233,13 @@ class JavaRDDObject[T](val rddObj: RDDObject[T])(implicit val classTag: ClassTag
    * @return JavaRDDObject[T]
    */
   def toJavaRDDObject: JavaRDDObject[T] = this
-  
+
   /**
    * get an RDDObject from a JavaRDDObject
    * @return RDDObject[T]
    */
   def toRDDObject: RDDObject[T] = rddObj
 }
-
 
 /**
  * Some simple StringUtils to use while wroking with RDDs
@@ -1348,12 +1333,12 @@ object RddDate {
  * Used for various RDD and RDDObject methods.
  */
 case class RddDate(val dttmInMs: Long) {
-  
+
   /**
    * Return difference in hours between this object and the input
    * @param dt RddDate
    * @return int
-   * 
+   *
    */
   def timeDiffInHrs(dt: RddDate): Int = {
     if (dt.dttmInMs > dttmInMs)
@@ -1365,7 +1350,7 @@ case class RddDate(val dttmInMs: Long) {
    * Return difference in days between this object and the input
    * @param dt RddDate
    * @return int
-   * 
+   *
    */
   def timeDiffInDays(dt: RddDate): Int = {
     if (dt.dttmInMs > dttmInMs)
@@ -1374,21 +1359,19 @@ case class RddDate(val dttmInMs: Long) {
   }
 
   //BUGBUG:: Do we need to return in UTC??????
-  
+
   /**
    * Return the TimeRange object that spans the last N days. N is an input
    *
    * @param days Int
    * @return TimeRange
-   * 
-   */  
+   *
+   */
   def lastNdays(days: Int): TimeRange = {
     val cal = Calendar.getInstance()
     cal.setTimeInMillis(dttmInMs)
-    val endTm =  cal.get(Calendar.YEAR) * 1000000 +  cal.get(Calendar.MONTH) * 10000 +  cal.get(Calendar.DAY_OF_MONTH) * 100 +  cal.get(Calendar.HOUR_OF_DAY)
     cal.add(Calendar.DATE, days * -1)
-    val stTm =  cal.get(Calendar.YEAR) * 1000000 +  cal.get(Calendar.MONTH) * 10000 +  cal.get(Calendar.DAY_OF_MONTH) * 100 +  cal.get(Calendar.HOUR_OF_DAY)
-    return TimeRange(stTm, endTm)
+    return TimeRange(cal.getTime.getTime(), dttmInMs)
   }
 
   //BUGBUG:: Do we need to return in UTC??????
@@ -1397,17 +1380,15 @@ case class RddDate(val dttmInMs: Long) {
    *
    * @param days Int
    * @return TimeRange
-   * 
-   */ 
+   *
+   */
   def nextNdays(days: Int): TimeRange = {
     val cal = Calendar.getInstance()
     cal.setTimeInMillis(dttmInMs)
-    val stTm =  cal.get(Calendar.YEAR) * 1000000 +  cal.get(Calendar.MONTH) * 10000 +  cal.get(Calendar.DAY_OF_MONTH) * 100 +  cal.get(Calendar.HOUR_OF_DAY)
     cal.add(Calendar.DATE, days)
-    val endTm =  cal.get(Calendar.YEAR) * 1000000 +  cal.get(Calendar.MONTH) * 10000 +  cal.get(Calendar.DAY_OF_MONTH) * 100 +  cal.get(Calendar.HOUR_OF_DAY)
-    return TimeRange(stTm, endTm)
+    return TimeRange(dttmInMs, cal.getTime.getTime())
   }
-  
+
   def getDateTimeInMs = dttmInMs
 }
 

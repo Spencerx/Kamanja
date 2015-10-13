@@ -27,9 +27,9 @@ import scala.collection.mutable.ArrayBuffer
 import com.ligadata.ZooKeeper._
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.locks.InterProcessMutex
-import com.ligadata.StorageBase.{ DataStore, Transaction, IStorage, Key, Value, StorageAdapterObj }
+import com.ligadata.StorageBase.{ DataStore, Transaction }
 import com.ligadata.keyvaluestore.KeyValueManager
-import com.ligadata.KamanjaData.{ KamanjaData }
+import com.ligadata.KvBase.{ Key, Value, TimeRange, KvBaseDefalts }
 
 object NodeLevelTransService {
   private[this] val LOG = Logger.getLogger(getClass);
@@ -50,8 +50,8 @@ object NodeLevelTransService {
 
   private def GetDataStoreHandle(jarPaths: collection.immutable.Set[String], dataStoreInfo: String, tableName: String): DataStore = {
     try {
-      LOG.debug("Getting DB Connection for dataStoreInfo:%s, tableName:%s".format(dataStoreInfo, tableName))
-      return KeyValueManager.Get(jarPaths, dataStoreInfo, tableName)
+      LOG.debug("Getting DB Connection for dataStoreInfo:%s".format(dataStoreInfo))
+      return KeyValueManager.Get(jarPaths, dataStoreInfo)
     } catch {
       case e: Exception => {
         e.printStackTrace()
@@ -60,53 +60,8 @@ object NodeLevelTransService {
     }
   }
 
-  private def getValueInfo(tupleBytes: Value): Array[Byte] = {
-    if (tupleBytes.size < _serInfoBufBytes) return null
-    val valInfoBytes = new Array[Byte](tupleBytes.size - _serInfoBufBytes)
-    Array.copy(tupleBytes.toArray, _serInfoBufBytes, valInfoBytes, 0, tupleBytes.size - _serInfoBufBytes)
-    valInfoBytes
-  }
-
-  private def makeKey(key: String): Key = {
-    var k = new Key
-    k ++= key.getBytes("UTF8")
-    k
-  }
-
-  private def makeValue(value: Array[Byte], serializerInfo: String): Value = {
-    var v = new Value
-    v ++= serializerInfo.getBytes("UTF8")
-
-    // Making sure we write first _serInfoBufBytes bytes as serializerInfo. Pad it if it is less than _serInfoBufBytes bytes
-    if (v.size < _serInfoBufBytes) {
-      val spacebyte = ' '.toByte
-      for (c <- v.size to _serInfoBufBytes)
-        v += spacebyte
-    }
-
-    // Trim if it is more than _serInfoBufBytes bytes
-    if (v.size > _serInfoBufBytes) {
-      v.reduceToSize(_serInfoBufBytes)
-    }
-
-    // Saving Value
-    v ++= value
-
-    v
-  }
-
-  private def buildTxnStartOffset(tupleBytes: Value, objs: Array[Long]) {
-    // Get first _serInfoBufBytes bytes
-    if (tupleBytes.size < _serInfoBufBytes) {
-      val errMsg = s"Invalid input. This has only ${tupleBytes.size} bytes data. But we are expecting serializer buffer bytes as of size ${_serInfoBufBytes}"
-      LOG.error(errMsg)
-      throw new Exception(errMsg)
-    }
-
-    val valInfo = getValueInfo(tupleBytes)
-
-    val uniqVal = new String(valInfo).toLong
-
+  private def buildTxnStartOffset(k: Key, v: Value, objs: Array[Long]) {
+    val uniqVal = new String(v.serializedInfo).toLong
     objs(0) = uniqVal
   }
 
@@ -116,6 +71,9 @@ object NodeLevelTransService {
       return (0, -1)
     }
 
+    val containerName = "GlobalCounters"
+    val bucket_key = Array[String]("TransactionId")
+
     var startTxnIdx: Long = 0
     var endTxnIdx: Long = -1
     var objs: Array[Long] = new Array[Long](1)
@@ -124,20 +82,17 @@ object NodeLevelTransService {
         throw new Exception("Not found Status DataStore to save Status.")
       }
 
-      val buildAdapOne = (tupleBytes: Value) => {
-        buildTxnStartOffset(tupleBytes, objs)
+      val buildTxnOff = (k: Key, v: Value) => {
+        buildTxnStartOffset(k, v, objs)
       }
-
-      val keystr = KamanjaData.PrepareKey("Txns", List[String]("Transactions"), 0, 0)
-      val key = makeKey(keystr)
 
       try {
         objs(0) = 0
-        txnsDataStore.get(key, buildAdapOne)
+        txnsDataStore.get(containerName, Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), Array(bucket_key), buildTxnOff)
         startTxnIdx = objs(0)
       } catch {
-        case e: Exception => LOG.debug("Key %s not found. Reason:%s, Message:%s".format(keystr, e.getCause, e.getMessage))
-        case t: Throwable => LOG.debug("Key %s not found. Reason:%s, Message:%s".format(keystr, t.getCause, t.getMessage))
+        case e: Exception => LOG.debug("Key %s not found. Reason:%s, Message:%s".format(bucket_key.mkString(","), e.getCause, e.getMessage))
+        case t: Throwable => LOG.debug("Key %s not found. Reason:%s, Message:%s".format(bucket_key.mkString(","), t.getCause, t.getMessage))
       }
 
       if (startTxnIdx <= 0)
@@ -145,26 +100,13 @@ object NodeLevelTransService {
       endTxnIdx = startTxnIdx + requestedRange - 1
 
       // Persists next start transactionId
-      val storeObjects = new Array[IStorage](1)
       var cntr = 0
       val nextTxnStart = endTxnIdx + 1
 
-      object obj extends IStorage {
-        val k = key
-
-        val v = makeValue(nextTxnStart.toString.getBytes("UTF8"), "CSV")
-
-        def Key = k
-
-        def Value = v
-
-        def Construct(Key: Key, Value: Value) = {}
-      }
-      storeObjects(cntr) = obj
-      cntr += 1
-
+      val k = Key(KvBaseDefalts.defaultTime, bucket_key, 0L, 0)
+      val v = Value("", nextTxnStart.toString.getBytes())
       val txn = txnsDataStore.beginTx()
-      txnsDataStore.putBatch(storeObjects)
+      txnsDataStore.put(containerName, k, v)
       txnsDataStore.commitTx(txn)
     } catch {
       case e: Exception => {

@@ -17,11 +17,13 @@
 package com.ligadata.automation.unittests.api.setup
 
 import java.io.File
+import java.util.Properties
 
 import com.ligadata.MetadataAPI.{ApiResult, MetadataAPIImpl => md}
 import com.ligadata.Serialize.SerializerManager
 import com.ligadata.kamanja.metadata.MdMgr
 import com.ligadata.Exceptions.AlreadyExistsException
+import com.ligadata.Utils.Utils.loadConfiguration
 
 import scala.collection.mutable
 import scala.io.Source
@@ -53,7 +55,6 @@ class MetadataManager(var config: MetadataAPIProperties) {
   }
 
   private val metadataDir = new File(getClass.getResource("/Metadata").getPath)
-
   logger.info("metadataDir => " + metadataDir)
 
   private val scalaHome = System.getenv("SCALA_HOME")
@@ -81,12 +82,31 @@ class MetadataManager(var config: MetadataAPIProperties) {
     logger.info("jarPathSystem => " + jarPathSystem)
 
     val jarPathApp: String = getClass.getResource("/jars/lib/application").getPath
-
     logger.info("jarPathApp => " + jarPathApp)
 
     md.metadataAPIConfig.setProperty("ROOT_DIR", "")
     md.metadataAPIConfig.setProperty("GIT_ROOT", "")
 
+    // loadConfiguration converts all the key values to lowercase
+    val (prop, failStr) = com.ligadata.Utils.Utils.loadConfiguration(ConfigDefaults.dataStorePropertiesFile, true)
+    if (failStr != null && failStr.size > 0) {
+      logger.error(failStr)
+      return
+    }
+    if (prop == null) {
+      logger.error("Failed to parse the entries in " + ConfigDefaults.dataStorePropertiesFile)
+      return
+    }
+    // Loop through and set the rest of the values.
+    val eProps1 = prop.propertyNames();
+    while (eProps1.hasMoreElements()) {
+      val key = eProps1.nextElement().asInstanceOf[String]
+      val value = prop.getProperty(key);
+      logger.info(key + " => " + value)
+      md.metadataAPIConfig.setProperty(key,value)
+    }
+
+    config.database = md.metadataAPIConfig.getProperty("database")
     logger.info("DATABASE => " + config.database)
 
     md.metadataAPIConfig.setProperty("NODE_ID", config.node_id)
@@ -96,14 +116,21 @@ class MetadataManager(var config: MetadataAPIProperties) {
     md.metadataAPIConfig.setProperty("DATABASE_HOST", config.databaseHost)
     md.metadataAPIConfig.setProperty("DATABASE_SCHEMA", config.databaseSchema)
     var dsJson:String = null
-    if( config.database.equalsIgnoreCase("hashmap") ){
+
+    if( config.database.equalsIgnoreCase("sqlserver") ){
       md.metadataAPIConfig.setProperty("DATABASE_LOCATION", config.dataDirectory)
-      dsJson="{\"StoreType\": \"" + config.database + "\",\"SchemaName\": \"" + config.databaseSchema + "\",\"Location\": \"" + config.dataDirectory + "\"}"
+      dsJson = md.metadataAPIConfig.getProperty("metadatadatastore")
+      logger.info("metadataDataStore => " + dsJson)
     }
     else{
-      md.metadataAPIConfig.setProperty("DATABASE_LOCATION", config.databaseHost)
-      dsJson="{\"StoreType\": \"" + config.database + "\",\"SchemaName\": \"" + config.databaseSchema + "\",\"Location\": \"" + config.databaseHost + "\"}"
-
+      if( config.database.equalsIgnoreCase("hashmap") ){
+	md.metadataAPIConfig.setProperty("DATABASE_LOCATION", config.dataDirectory)
+	dsJson="{\"StoreType\": \"" + config.database + "\",\"SchemaName\": \"" + config.databaseSchema + "\",\"Location\": \"" + config.dataDirectory + "\"}"
+      }
+      else{
+	md.metadataAPIConfig.setProperty("DATABASE_LOCATION", config.databaseHost)
+	dsJson="{\"StoreType\": \"" + config.database + "\",\"SchemaName\": \"" + config.databaseSchema + "\",\"Location\": \"" + config.databaseHost + "\"}"
+      }
     }
     md.metadataAPIConfig.setProperty("MetadataDataStore",dsJson)
     md.metadataAPIConfig.setProperty("METADATA_DATASTORE",dsJson)
@@ -121,7 +148,7 @@ class MetadataManager(var config: MetadataAPIProperties) {
     md.metadataAPIConfig.setProperty("SECURITY_IMPL_CLASS", "com.ligadata.Security.SimpleApacheShiroAdapter")
     md.metadataAPIConfig.setProperty("DO_AUTH", "YES")
     md.metadataAPIConfig.setProperty("AUDIT_IMPL_JAR", jarPathSystem + "/auditadapters_2.10-1.0.jar")
-    md.metadataAPIConfig.setProperty("DO_AUDIT", "YES")
+    md.metadataAPIConfig.setProperty("DO_AUDIT", "NO")
     var db = config.database.toLowerCase
     db match {
       case "cassandra" => {
@@ -132,6 +159,9 @@ class MetadataManager(var config: MetadataAPIProperties) {
       }
       case "hashmap" => {
 	md.metadataAPIConfig.setProperty("AUDIT_IMPL_CLASS", "com.ligadata.audit.adapters.AuditHashMapAdapter")
+      }
+      case "sqlserver" => {
+	md.metadataAPIConfig.setProperty("AUDIT_IMPL_CLASS", "com.ligadata.audit.adapters.AuditCassandraAdapter")
       }
       case _ => {
 	throw new MetadataManagerException("Unknown DataStoreType: " + db)
@@ -145,5 +175,6 @@ class MetadataManager(var config: MetadataAPIProperties) {
     md.metadataAPIConfig.setProperty("CONCEPT_FILES_DIR",metadataDir.getAbsoluteFile + "/concept")
     md.metadataAPIConfig.setProperty("TYPE_FILES_DIR",metadataDir.getAbsoluteFile + "/type")
     md.metadataAPIConfig.setProperty("CONFIG_FILES_DIR",metadataDir.getAbsoluteFile + "/config")
+    md.propertiesAlreadyLoaded = true
   }
 }

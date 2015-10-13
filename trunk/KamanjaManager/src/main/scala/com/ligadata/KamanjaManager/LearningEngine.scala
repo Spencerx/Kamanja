@@ -53,7 +53,7 @@ class LearningEngine(val input: InputAdapter, val curPartitionKey: PartitionUniq
           if (md.mdl.IsValidMessage(finalTopMsgOrContainer)) {
             LOG.debug("Processing uniqueKey:%s, uniqueVal:%s, model:%s".format(uk, uv, md.mdl.ModelName))
             // Checking whether this message has any fields/concepts to execute in this model
-            val mdlCtxt = new ModelContext(new TransactionContext(transId, envContext, md.tenantId), finalTopMsgOrContainer, inputData)
+            val mdlCtxt = new ModelContext(new TransactionContext(transId, envContext, md.tenantId), finalTopMsgOrContainer, inputData, uk)
             ThreadLocalStorage.modelContextInfo.set(mdlCtxt)
             val curMd = md.mdl.CreateNewModel(mdlCtxt)
             if (curMd != null) {
@@ -71,9 +71,13 @@ class LearningEngine(val input: InputAdapter, val curPartitionKey: PartitionUniq
         } catch {
           case e: Exception => {
             LOG.error("Model Failed => " + md.mdl.ModelName() + ". Reason: " + e.getCause + ". Message: " + e.getMessage)
+            val stackTrace = StackTrace.ThrowableTraceString(e)
+            LOG.error("StackTrace:" + stackTrace)
           }
           case t: Throwable => {
             LOG.error("Model Failed => " + md.mdl.ModelName() + ". Reason: " + t.getCause + ". Message: " + t.getMessage)
+            val stackTrace = StackTrace.ThrowableTraceString(t)
+            LOG.error("StackTrace:" + stackTrace)
           }
         } finally {
           ThreadLocalStorage.modelContextInfo.remove

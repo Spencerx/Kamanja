@@ -20,7 +20,7 @@ import java.util.Date
 import org.json4s.jackson.JsonMethods._
 import com.ligadata.KamanjaBase.{ InputData, DelimitedData, JsonData, XmlData }
 import java.io.{ DataInputStream, DataOutputStream }
-import com.ligadata.KamanjaBase.{ BaseMsg, BaseMsgObj, TransformMessage, BaseContainer, BaseContainerObj, MdBaseResolveInfo, RDDObject, RDD, TimeRange, JavaRDDObject, MessageContainerBase }
+import com.ligadata.KamanjaBase.{ BaseMsg, BaseMsgObj, TransformMessage, BaseContainer, BaseContainerObj, MdBaseResolveInfo, RDDObject, RDD, JavaRDDObject, MessageContainerBase }
 
 object CustAlertHistory extends RDDObject[CustAlertHistory] with BaseContainerObj {
   type T = CustAlertHistory
@@ -37,11 +37,31 @@ object CustAlertHistory extends RDDObject[CustAlertHistory] with BaseContainerOb
   def build = new T
   def build(from: T) = new T(from)
 
-  val partitionKeys: Array[String] = null
+  val partitionKeys: Array[String] = null;
   val partKeyPos = Array(0)
+  val primaryKeys: Array[String] = null;
+   
 
   override def PartitionKeyData(inputdata: InputData): Array[String] = Array[String]()
   override def PrimaryKeyData(inputdata: InputData): Array[String] = Array[String]()
+  override def getTimePartitionInfo: (String, String, String) = (null, null, null) // FieldName, Format & Time Partition Types(Daily/Monthly/Yearly)
+  override def TimePartitionData(inputdata: InputData): Long = 0
+  
+  override def hasPrimaryKey(): Boolean = {
+	if(primaryKeys == null) return false;
+	(primaryKeys.size > 0);
+  }
+
+  override def hasPartitionKey(): Boolean = {
+	 if(partitionKeys == null) return false;
+    (partitionKeys.size > 0);
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    val tmPartInfo = getTimePartitionInfo
+    (tmPartInfo != null && tmPartInfo._1 != null && tmPartInfo._2 != null && tmPartInfo._3 != null);
+  }
+  
   override def getFullName = FullName
   override def toJavaRDDObject: JavaRDDObject[T] = JavaRDDObject.fromRDDObject[T](this)
 }
@@ -68,6 +88,7 @@ class CustAlertHistory(var transactionId: Long, other: CustAlertHistory) extends
   override def NameSpace: String = CustAlertHistory.NameSpace
   override def Name: String = CustAlertHistory.Name
   override def Version: String = CustAlertHistory.Version
+   
 
   var custid: Long = 0;
   var branchid: Int = 0;
@@ -103,6 +124,19 @@ class CustAlertHistory(var transactionId: Long, other: CustAlertHistory) extends
   override def Serialize(dos: DataOutputStream): Unit = {}
   override def Deserialize(dis: DataInputStream, mdResolver: MdBaseResolveInfo, loader: java.lang.ClassLoader, savedDataVersion: String): Unit = {}
   def ConvertPrevToNewVerObj(obj: Any): Unit = {}
+  override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = null
+  
+  override def hasPrimaryKey(): Boolean = {
+    CustAlertHistory.hasPrimaryKey;
+  }
+
+  override def hasPartitionKey(): Boolean = {
+    CustAlertHistory.hasPartitionKey;
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    CustAlertHistory.hasTimeParitionInfo;
+  }
 }
 
 object CustPreferences extends RDDObject[CustPreferences] with BaseContainerObj {
@@ -120,12 +154,29 @@ object CustPreferences extends RDDObject[CustPreferences] with BaseContainerObj 
   def build = new T
   def build(from: T) = new T(from)
 
-  val partitionKeys: Array[String] = null
+  val partitionKeys: Array[String] = null;
   val partKeyPos = Array(0)
-
+  val primaryKeys: Array[String] = null;
+   
   override def PartitionKeyData(inputdata: InputData): Array[String] = Array[String]()
   override def PrimaryKeyData(inputdata: InputData): Array[String] = Array[String]()
+  override def getTimePartitionInfo: (String, String, String) = (null, null, null) // FieldName, Format & Time Partition Types(Daily/Monthly/Yearly)
+  override def TimePartitionData(inputdata: InputData): Long = 0
 
+  override def hasPrimaryKey(): Boolean = {
+	if(primaryKeys == null) return false;
+	(primaryKeys.size > 0);
+  }
+
+  override def hasPartitionKey(): Boolean = {
+	 if(partitionKeys == null) return false;
+    (partitionKeys.size > 0);
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    val tmPartInfo = getTimePartitionInfo
+   (tmPartInfo != null && tmPartInfo._1 != null && tmPartInfo._2 != null && tmPartInfo._3 != null);
+  }
   override def getFullName = FullName
   override def toJavaRDDObject: JavaRDDObject[T] = JavaRDDObject.fromRDDObject[T](this)
 }
@@ -152,7 +203,7 @@ class CustPreferences(var transactionId: Long, other: CustPreferences) extends B
   override def NameSpace: String = CustPreferences.NameSpace
   override def Name: String = CustPreferences.Name
   override def Version: String = CustPreferences.Version
-
+ 
   def withMinBalanceAlertOptout(curDt: Date): CustPreferences = { this }
   def withOverdraftlimit(alertType: String): CustPreferences = { this }
   def withMultiDayMinBalanceAlertOptout(daysWithLessBalance: Int): CustPreferences = { this }
@@ -187,6 +238,21 @@ class CustPreferences(var transactionId: Long, other: CustPreferences) extends B
   override def Serialize(dos: DataOutputStream): Unit = {}
   override def Deserialize(dis: DataInputStream, mdResolver: MdBaseResolveInfo, loader: java.lang.ClassLoader, savedDataVersion: String): Unit = {}
   def ConvertPrevToNewVerObj(obj: Any): Unit = {}
+  override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = null
+  
+  
+  override def hasPrimaryKey(): Boolean = {
+    CustPreferences.hasPrimaryKey;
+  }
+
+  override def hasPartitionKey(): Boolean = {
+    CustPreferences.hasPartitionKey;
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    CustPreferences.hasTimeParitionInfo;
+  }
+
 }
 
 object CustTransaction extends RDDObject[CustTransaction] with BaseMsgObj {
@@ -203,15 +269,33 @@ object CustTransaction extends RDDObject[CustTransaction] with BaseMsgObj {
   override def IsKv: Boolean = false;
   override def CanPersist: Boolean = true;
 
-  val partitionKeys: Array[String] = null
+  val partitionKeys: Array[String] = null;
   val partKeyPos = Array(0)
-
+  val primaryKeys: Array[String] = null;
+   
   def build = new T
   def build(from: T) = new T(from)
 
   override def PartitionKeyData(inputdata: InputData): Array[String] = Array[String]()
   override def PrimaryKeyData(inputdata: InputData): Array[String] = Array[String]()
+  override def getTimePartitionInfo: (String, String, String) = (null, null, null) // FieldName, Format & Time Partition Types(Daily/Monthly/Yearly)
+  override def TimePartitionData(inputdata: InputData): Long = 0
 
+  override def hasPrimaryKey(): Boolean = {
+	if(primaryKeys == null) return false;
+	(primaryKeys.size > 0);
+  }
+
+  override def hasPartitionKey(): Boolean = {
+	 if(partitionKeys == null) return false;
+    (partitionKeys.size > 0);
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    val tmPartInfo = getTimePartitionInfo
+    (tmPartInfo != null && tmPartInfo._1 != null && tmPartInfo._2 != null && tmPartInfo._3 != null);
+  }
+  
   override def getFullName = FullName
   override def toJavaRDDObject: JavaRDDObject[T] = JavaRDDObject.fromRDDObject[T](this)
 }
@@ -238,7 +322,7 @@ class CustTransaction(var transactionId: Long, other: CustTransaction) extends B
   override def NameSpace: String = CustTransaction.NameSpace
   override def Name: String = CustTransaction.Name
   override def Version: String = CustTransaction.Version
-
+  
   def Clone(): MessageContainerBase = {
     CustTransaction.build(this)
   }
@@ -272,6 +356,21 @@ class CustTransaction(var transactionId: Long, other: CustTransaction) extends B
   override def Serialize(dos: DataOutputStream): Unit = {}
   override def Deserialize(dis: DataInputStream, mdResolver: MdBaseResolveInfo, loader: java.lang.ClassLoader, savedDataVersion: String): Unit = {}
   def ConvertPrevToNewVerObj(obj: Any): Unit = {}
+  override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = null
+  
+  
+  override def hasPrimaryKey(): Boolean = {
+    CustTransaction.hasPrimaryKey;
+  }
+
+  override def hasPartitionKey(): Boolean = {
+    CustTransaction.hasPartitionKey;
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    CustTransaction.hasTimeParitionInfo;
+  }
+
 }
 
 object GlobalPreferences extends RDDObject[GlobalPreferences] with BaseContainerObj {
@@ -289,12 +388,30 @@ object GlobalPreferences extends RDDObject[GlobalPreferences] with BaseContainer
   def build = new T
   def build(from: T) = new T(from)
 
-  val partitionKeys: Array[String] = null
+  val partitionKeys: Array[String] = null;
   val partKeyPos = Array(0)
-
+  val primaryKeys: Array[String] = null;
+   
   override def PartitionKeyData(inputdata: InputData): Array[String] = Array[String]()
   override def PrimaryKeyData(inputdata: InputData): Array[String] = Array[String]()
+  override def getTimePartitionInfo: (String, String, String) = (null, null, null) // FieldName, Format & Time Partition Types(Daily/Monthly/Yearly)
+  override def TimePartitionData(inputdata: InputData): Long = 0
 
+  override def hasPrimaryKey(): Boolean = {
+	if(primaryKeys == null) return false;
+	(primaryKeys.size > 0);
+  }
+
+  override def hasPartitionKey(): Boolean = {
+	 if(partitionKeys == null) return false;
+    (partitionKeys.size > 0);
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    val tmPartInfo = getTimePartitionInfo
+    (tmPartInfo != null && tmPartInfo._1 != null && tmPartInfo._2 != null && tmPartInfo._3 != null);
+  }
+  
   override def getFullName = FullName
   override def toJavaRDDObject: JavaRDDObject[T] = JavaRDDObject.fromRDDObject[T](this)
 }
@@ -321,7 +438,7 @@ class GlobalPreferences(var transactionId: Long, other: GlobalPreferences) exten
   override def NameSpace: String = GlobalPreferences.NameSpace
   override def Name: String = GlobalPreferences.Name
   override def Version: String = GlobalPreferences.Version
-
+ 
   def Clone(): MessageContainerBase = {
     GlobalPreferences.build(this)
   }
@@ -351,5 +468,20 @@ class GlobalPreferences(var transactionId: Long, other: GlobalPreferences) exten
   override def Serialize(dos: DataOutputStream): Unit = {}
   override def Deserialize(dis: DataInputStream, mdResolver: MdBaseResolveInfo, loader: java.lang.ClassLoader, savedDataVersion: String): Unit = {}
   def ConvertPrevToNewVerObj(obj: Any): Unit = {}
+  override def getNativeKeyValues(): scala.collection.immutable.Map[String, (String, Any)] = null
+  
+  
+  override def hasPrimaryKey(): Boolean = {
+    GlobalPreferences.hasPrimaryKey;
+  }
+
+  override def hasPartitionKey(): Boolean = {
+    GlobalPreferences.hasPartitionKey;
+  }
+
+  override def hasTimeParitionInfo(): Boolean = {
+    GlobalPreferences.hasTimeParitionInfo;
+  }
+
 }
 

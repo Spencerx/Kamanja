@@ -78,6 +78,11 @@ class MessageFldsExtractor {
     var withMethods = new StringBuilder(8 * 1024)
     var fromFuncBuf = new StringBuilder(8 * 1024)
     var fromFuncBaseTypesBuf = new StringBuilder(8 * 1024)
+    var timePartitionPos: String = ""
+    var timePartitionFld: String = ""
+    var nativeKeyMapBuf = new StringBuilder(8 * 1024)
+    var getNativeKeyValues = new StringBuilder(8 * 1024)
+
 
     var list = List[(String, String)]()
     var argsList = List[(String, String, String, String, Boolean, String)]()
@@ -154,160 +159,65 @@ class MessageFldsExtractor {
 
       if (message.Elements != null)
         for (f <- message.Elements) {
+          if (!f.Name.equalsIgnoreCase("timePartitionData")) {
+            // val typ = MdMgr.GetMdMgr.Type(key, ver, onlyActive)(f.Ttype)
+            //val attr = MdMgr.GetMdMgr.Attribute(message.NameSpace, message.Name)
+            //  val container = MdMgr.GetMdMgr.Containers(onlyActive, latestVersion)
+            if (keysSet.contains(f.Name)) throw new Exception("Duplicate Key " + f.Name + " Exists, please check Message Definition JSON")
+            keysSet = keysSet + f.Name
 
-          // val typ = MdMgr.GetMdMgr.Type(key, ver, onlyActive)(f.Ttype)
-          //val attr = MdMgr.GetMdMgr.Attribute(message.NameSpace, message.Name)
-          //  val container = MdMgr.GetMdMgr.Containers(onlyActive, latestVersion)
-          if (keysSet.contains(f.Name)) throw new Exception("Duplicate Key " + f.Name + " Exists, please check Message Definition JSON")
-          keysSet = keysSet + f.Name
+            if (f.FieldtypeVer != null)
+              ftypeVersion = MdMgr.ConvertVersionToLong(message.Version)
 
-          if (f.FieldtypeVer != null)
-            ftypeVersion = MdMgr.ConvertVersionToLong(message.Version)
+            if ((f.ElemType.equals("Field")) || (f.ElemType.equals("Fields"))) {
 
-          if ((f.ElemType.equals("Field")) || (f.ElemType.equals("Fields"))) {
+              log.debug("message.Version " + MdMgr.ConvertVersionToLong(message.Version))
 
-            log.debug("message.Version " + MdMgr.ConvertVersionToLong(message.Version))
+              val typ = MdMgr.GetMdMgr.Type(f.Ttype, ftypeVersion, true) // message.Version.toLong
 
-            val typ = MdMgr.GetMdMgr.Type(f.Ttype, ftypeVersion, true) // message.Version.toLong
+              if (typ.getOrElse("None").equals("None"))
+                throw new Exception("Type not found in metadata for Name: " + f.Name + " , NameSpace: " + f.NameSpace + " , Version: " + message.Version + " , Type : " + f.Ttype)
 
-            if (typ.getOrElse("None").equals("None"))
-              throw new Exception("Type not found in metadata for Name: " + f.Name + " , NameSpace: " + f.NameSpace + " , Version: " + message.Version + " , Type : " + f.Ttype)
+              if (typ.get.tType == null) throw new Exception("tType in Type do not exists")
 
-            if (typ.get.tType == null) throw new Exception("tType in Type do not exists")
+              if (typ.get.tType.toString().equals("tArray")) {
 
-            if (typ.get.tType.toString().equals("tArray")) {
+                val (arr_1, arr_2, arr_3, arr_4) = arrayTypeHandler.handleArrayType(keys, typ, f, message, childs, prevVerMsgBaseTypesIdxArry, recompile)
 
-              val (arr_1, arr_2, arr_3, arr_4) = arrayTypeHandler.handleArrayType(keys, typ, f, message, childs, prevVerMsgBaseTypesIdxArry, recompile)
+                list = arr_1
+                argsList = argsList ::: arr_2
+                jarset = jarset ++ arr_3
 
-              list = arr_1
-              argsList = argsList ::: arr_2
-              jarset = jarset ++ arr_3
+                scalaclass = scalaclass.append(arr_4(0))
+                assignCsvdata = assignCsvdata.append(arr_4(1))
+                assignJsondata = assignJsondata.append(arr_4(2))
+                assignXmldata = assignXmldata.append(arr_4(3))
+                addMsg = addMsg.append(arr_4(4))
+                msgAndCntnrsStr = msgAndCntnrsStr.append(arr_4(5))
+                getMsg = getMsg.append(arr_4(6))
+                serializedBuf = serializedBuf.append(arr_4(7))
+                deserializedBuf = deserializedBuf.append(arr_4(8))
+                prevDeserializedBuf = prevDeserializedBuf.append(arr_4(9))
+                convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(arr_4(10))
+                collections = collections.append(arr_4(11))
+                mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(arr_4(12))
+                mappedMsgFieldsArry = mappedMsgFieldsArry.append(arr_4(13))
+                mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(arr_4(14))
+                fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arr_4(15))
+                withMethods = withMethods.append(arr_4(16))
+                fromFuncBuf = fromFuncBuf.append(arr_4(17))
+                assignKvData = assignKvData.append(arr_4(18))
+                nativeKeyMapBuf = nativeKeyMapBuf.append(arr_4(19))
+                getNativeKeyValues = getNativeKeyValues.append(arr_4(20))
 
-              scalaclass = scalaclass.append(arr_4(0))
-              assignCsvdata = assignCsvdata.append(arr_4(1))
-              assignJsondata = assignJsondata.append(arr_4(2))
-              assignXmldata = assignXmldata.append(arr_4(3))
-              addMsg = addMsg.append(arr_4(4))
-              msgAndCntnrsStr = msgAndCntnrsStr.append(arr_4(5))
-              getMsg = getMsg.append(arr_4(6))
-              serializedBuf = serializedBuf.append(arr_4(7))
-              deserializedBuf = deserializedBuf.append(arr_4(8))
-              prevDeserializedBuf = prevDeserializedBuf.append(arr_4(9))
-              convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(arr_4(10))
-              collections = collections.append(arr_4(11))
-              mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(arr_4(12))
-              mappedMsgFieldsArry = mappedMsgFieldsArry.append(arr_4(13))
-              mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(arr_4(14))
-              fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arr_4(15))
-              withMethods = withMethods.append(arr_4(16))
-              fromFuncBuf = fromFuncBuf.append(arr_4(17))
-              assignKvData = assignKvData.append(arr_4(18))
 
-              //       =  assignCsvdata.toString, assignJsondata.toString, assignXmldata.toString,  list, argsList, addMsg.toString)  = 
-            } else if (typ.get.tType.toString().equals("tArrayBuf")) {
-              val (arrayBuf_1, arrayBuf_2, arrayBuf_3, arrayBuf_4) = arrayTypeHandler.handleArrayBuffer(keys, message, typ, f, childs, prevVerMsgBaseTypesIdxArry, recompile)
-              list = arrayBuf_1
-              argsList = argsList ::: arrayBuf_2
-              jarset = jarset ++ arrayBuf_3
-
-              scalaclass = scalaclass.append(arrayBuf_4(0))
-              assignCsvdata = assignCsvdata.append(arrayBuf_4(1))
-              assignJsondata = assignJsondata.append(arrayBuf_4(2))
-              assignXmldata = assignXmldata.append(arrayBuf_4(3))
-              addMsg = addMsg.append(arrayBuf_4(4))
-              msgAndCntnrsStr = msgAndCntnrsStr.append(arrayBuf_4(5))
-              keysStr = keysStr.append(arrayBuf_4(6))
-              getMsg = getMsg.append(arrayBuf_4(7))
-              serializedBuf = serializedBuf.append(arrayBuf_4(8))
-              deserializedBuf = deserializedBuf.append(arrayBuf_4(9))
-              prevDeserializedBuf = prevDeserializedBuf.append(arrayBuf_4(10))
-              convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(arrayBuf_4(11))
-              collections = collections.append(arrayBuf_4(12))
-              mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(arrayBuf_4(13))
-              mappedMsgFieldsVar = mappedMsgFieldsVar.append(arrayBuf_4(14))
-              mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(arrayBuf_4(15))
-              mappedMsgFieldsArryBuffer = mappedMsgFieldsArryBuffer.append(arrayBuf_4(16))
-              fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arrayBuf_4(17))
-              withMethods = withMethods.append(arrayBuf_4(18))
-              fromFuncBuf = fromFuncBuf.append(arrayBuf_4(19))
-              assignKvData = assignKvData.append(arrayBuf_4(20))
-
-            } else if (typ.get.tType.toString().equals("tHashMap")) {
-
-              assignCsvdata.append(newline + "//HashMap not handled at this momemt" + newline)
-              assignJsondata.append(newline + "//HashMap not handled at this momemt" + newline)
-            } else if (typ.get.tType.toString().equals("tTreeSet")) {
-
-              assignCsvdata.append(newline + "//Tree Set not handled at this momemt" + newline)
-              assignJsondata.append(newline + "//Tree Set not handled at this momemt" + newline)
-            } else {
-              val (baseTyp_1, baseTyp_2, baseTyp_3, baseTyp_4, baseTyp_5, baseTyp_6) = baseTypesHandler.handleBaseTypes(keys, message.Fixed, typ, f, message.Version, childs, prevVerMsgBaseTypesIdxArry, recompile, mappedTypesABuf, firstTimeBaseType, message)
-              list = baseTyp_1
-              argsList = argsList ::: baseTyp_2
-              jarset = jarset ++ baseTyp_3
-              mappedTypesABuf = baseTyp_4
-              prevVerMsgBaseTypesIdxArry = baseTyp_5
-
-              scalaclass = scalaclass.append(baseTyp_6(0))
-              assignCsvdata = assignCsvdata.append(baseTyp_6(1))
-              assignJsondata = assignJsondata.append(baseTyp_6(2))
-              assignXmldata = assignXmldata.append(baseTyp_6(3))
-
-              addMsg = addMsg.append(baseTyp_6(4))
-              keysStr = keysStr.append(baseTyp_6(5))
-              typeImpl = typeImpl.append(baseTyp_6(6))
-
-              if (message.Fixed.toLowerCase().equals("true")) {
-                serializedBuf = serializedBuf.append(baseTyp_6(7))
-                deserializedBuf = deserializedBuf.append(baseTyp_6(8))
-              } else if (message.Fixed.toLowerCase().equals("false")) {
-                mappedSerBaseTypesBuf = mappedSerBaseTypesBuf.append(baseTyp_6(7))
-                mappedDeserBaseTypesBuf = mappedDeserBaseTypesBuf.append(baseTyp_6(8))
-              }
-
-              prevDeserializedBuf = prevDeserializedBuf.append(baseTyp_6(9))
-              convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(baseTyp_6(10))
-
-              mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(baseTyp_6(11))
-              mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(baseTyp_6(12))
-              prevObjTypNotMatchDeserializedBuf = prevObjTypNotMatchDeserializedBuf.append(baseTyp_6(13))
-
-              fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(baseTyp_6(14))
-              withMethods = withMethods.append(baseTyp_6(15))
-              fromFuncBaseTypesBuf = fromFuncBaseTypesBuf.append(baseTyp_6(16))
-              assignKvData = assignKvData.append(baseTyp_6(17))
-
-              if (paritionkeys != null && paritionkeys.size > 0) {
-                if (paritionkeys.contains(f.Name)) {
-                  partitionPos = partitionPos :+ count
-                }
-              }
-              if (primaryKeys != null && primaryKeys.size > 0) {
-                if (primaryKeys.contains(f.Name)) {
-                  primaryPos = primaryPos :+ count
-                }
-              }
-              firstTimeBaseType = false
-            }
-            count = count + 1
-
-          } else if ((f.ElemType.equals("Container")) || (f.ElemType.equals("Message"))) {
-
-            if (f.ElemType.equals("Message"))
-              throw new Exception("Adding Child Messages are not allowed in Message/Container Definition")
-
-            //val typ = MdMgr.GetMdMgr.Type(f.Ttype, ftypeVersion, true) // message.Version.toLong
-            val typ = MdMgr.GetMdMgr.Type(f.Ttype, -1, true) // message.Version.toLong
-
-            if (typ.getOrElse("None").equals("None"))
-              throw new Exception("Type not found in metadata for Name: " + f.Name + " , NameSpace: " + f.NameSpace + " , Version: " + message.Version + " , Type : " + f.Ttype)
-
-            if (typ.getOrElse(null) != null) {
-              if (typ.get.tType.toString().equals("tArrayBuf")) {
+                //       =  assignCsvdata.toString, assignJsondata.toString, assignXmldata.toString,  list, argsList, addMsg.toString)  = 
+              } else if (typ.get.tType.toString().equals("tArrayBuf")) {
                 val (arrayBuf_1, arrayBuf_2, arrayBuf_3, arrayBuf_4) = arrayTypeHandler.handleArrayBuffer(keys, message, typ, f, childs, prevVerMsgBaseTypesIdxArry, recompile)
                 list = arrayBuf_1
                 argsList = argsList ::: arrayBuf_2
                 jarset = jarset ++ arrayBuf_3
+
                 scalaclass = scalaclass.append(arrayBuf_4(0))
                 assignCsvdata = assignCsvdata.append(arrayBuf_4(1))
                 assignJsondata = assignJsondata.append(arrayBuf_4(2))
@@ -328,69 +238,189 @@ class MessageFldsExtractor {
                 fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arrayBuf_4(17))
                 withMethods = withMethods.append(arrayBuf_4(18))
                 fromFuncBuf = fromFuncBuf.append(arrayBuf_4(19))
-                assignKvData = assignKvData.append("// Not Handling Array of Container")
+                assignKvData = assignKvData.append(arrayBuf_4(20))
+                nativeKeyMapBuf = nativeKeyMapBuf.append(arrayBuf_4(21))
+                getNativeKeyValues = getNativeKeyValues.append(arrayBuf_4(22))
 
-              } else if (typ.get.tType.toString().equals("tArray")) {
 
-                val (arr_1, arr_2, arr_3, arr_4) = arrayTypeHandler.handleArrayType(keys, typ, f, message, childs, prevVerMsgBaseTypesIdxArry, recompile)
+              } else if (typ.get.tType.toString().equals("tHashMap")) {
 
-                list = arr_1
-                argsList = argsList ::: arr_2
-                jarset = jarset ++ arr_3
-                scalaclass = scalaclass.append(arr_4(0))
-                assignCsvdata = assignCsvdata.append(arr_4(1))
-                assignJsondata = assignJsondata.append(arr_4(2))
-                assignXmldata = assignXmldata.append(arr_4(3))
-                addMsg = addMsg.append(arr_4(4))
-                msgAndCntnrsStr = msgAndCntnrsStr.append(arr_4(5))
-                getMsg = getMsg.append(arr_4(6))
-                serializedBuf = serializedBuf.append(arr_4(7))
-                deserializedBuf = deserializedBuf.append(arr_4(8))
-                prevDeserializedBuf = prevDeserializedBuf.append(arr_4(9))
-                convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(arr_4(10))
-                collections = collections.append(arr_4(11))
-                mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(arr_4(12))
-                mappedMsgFieldsArry = mappedMsgFieldsArry.append(arr_4(13))
-                mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(arr_4(14))
-                fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arr_4(15))
-                withMethods = withMethods.append(arr_4(16))
-                fromFuncBuf = fromFuncBuf.append(arr_4(17))
-                assignKvData = assignKvData.append("// Not Handling Array of Container")
+                assignCsvdata.append(newline + "//HashMap not handled at this momemt" + newline)
+                assignJsondata.append(newline + "//HashMap not handled at this momemt" + newline)
+              } else if (typ.get.tType.toString().equals("tTreeSet")) {
 
-                //       =  assignCsvdata.toString, assignJsondata.toString, assignXmldata.toString,  list, argsList, addMsg.toString)  = 
+                assignCsvdata.append(newline + "//Tree Set not handled at this momemt" + newline)
+                assignJsondata.append(newline + "//Tree Set not handled at this momemt" + newline)
               } else {
+                val (baseTyp_1, baseTyp_2, baseTyp_3, baseTyp_4, baseTyp_5, baseTyp_6) = baseTypesHandler.handleBaseTypes(keys, message.Fixed, typ, f, message.Version, childs, prevVerMsgBaseTypesIdxArry, recompile, mappedTypesABuf, firstTimeBaseType, message)
+                list = baseTyp_1
+                argsList = argsList ::: baseTyp_2
+                jarset = jarset ++ baseTyp_3
+                mappedTypesABuf = baseTyp_4
+                prevVerMsgBaseTypesIdxArry = baseTyp_5
 
-                if (f.ElemType.equals("Container")) {
+                scalaclass = scalaclass.append(baseTyp_6(0))
+                assignCsvdata = assignCsvdata.append(baseTyp_6(1))
+                assignJsondata = assignJsondata.append(baseTyp_6(2))
+                assignXmldata = assignXmldata.append(baseTyp_6(3))
 
-                  val (cntnr_1, cntnr_2, cntnr_3, cntnr_4) = cntTypHandler.handleContainer(message, mdMgr, ftypeVersion, f, recompile, childs)
-                  list = cntnr_1
-                  argsList = argsList ::: cntnr_2
-                  jarset = jarset ++ cntnr_3
-                  scalaclass = scalaclass.append(cntnr_4(0))
-                  assignCsvdata = assignCsvdata.append(cntnr_4(1))
-                  assignJsondata = assignJsondata.append(cntnr_4(2))
-                  assignXmldata = assignXmldata.append(cntnr_4(3))
-                  addMsg = addMsg.append(cntnr_4(4))
-                  msgAndCntnrsStr = msgAndCntnrsStr.append(cntnr_4(5))
-                  serializedBuf = serializedBuf.append(cntnr_4(6))
-                  deserializedBuf = deserializedBuf.append(cntnr_4(7))
-                  prevDeserializedBuf = prevDeserializedBuf.append(cntnr_4(8))
-                  convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(cntnr_4(9))
-                  mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(cntnr_4(10))
-                  mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(cntnr_4(11))
-                  fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(cntnr_4(12))
+                addMsg = addMsg.append(baseTyp_6(4))
+                keysStr = keysStr.append(baseTyp_6(5))
+                typeImpl = typeImpl.append(baseTyp_6(6))
 
-                  withMethods = withMethods.append(cntnr_4(13))
-                  fromFuncBuf = fromFuncBuf.append(cntnr_4(14))
-                  assignKvData = assignKvData.append("// Not Handling Container")
-                  //   mappedPrevVerMatchkeys
-
+                if (message.Fixed.toLowerCase().equals("true")) {
+                  serializedBuf = serializedBuf.append(baseTyp_6(7))
+                  deserializedBuf = deserializedBuf.append(baseTyp_6(8))
+                } else if (message.Fixed.toLowerCase().equals("false")) {
+                  mappedSerBaseTypesBuf = mappedSerBaseTypesBuf.append(baseTyp_6(7))
+                  mappedDeserBaseTypesBuf = mappedDeserBaseTypesBuf.append(baseTyp_6(8))
                 }
-                /**
-                 * Commenting the below code since the child messages are not allowed in message def.
-                 *
-                 */
-                /*else if (f.ElemType.equals("Message")) {
+
+                prevDeserializedBuf = prevDeserializedBuf.append(baseTyp_6(9))
+                convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(baseTyp_6(10))
+
+                mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(baseTyp_6(11))
+                mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(baseTyp_6(12))
+                prevObjTypNotMatchDeserializedBuf = prevObjTypNotMatchDeserializedBuf.append(baseTyp_6(13))
+
+                fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(baseTyp_6(14))
+                withMethods = withMethods.append(baseTyp_6(15))
+                fromFuncBaseTypesBuf = fromFuncBaseTypesBuf.append(baseTyp_6(16))
+                assignKvData = assignKvData.append(baseTyp_6(17))
+                nativeKeyMapBuf = nativeKeyMapBuf.append(baseTyp_6(18))
+                getNativeKeyValues = getNativeKeyValues.append(baseTyp_6(19))
+
+
+                if (paritionkeys != null && paritionkeys.size > 0) {
+                  if (paritionkeys.contains(f.Name)) {
+                    partitionPos = partitionPos :+ count
+                  }
+                }
+                if (primaryKeys != null && primaryKeys.size > 0) {
+                  if (primaryKeys.contains(f.Name)) {
+                    primaryPos = primaryPos :+ count
+                  }
+                }
+                firstTimeBaseType = false
+
+              }
+              if (message.timePartition != null && message.timePartition.Key.equalsIgnoreCase(f.Name)) {
+                timePartitionPos = count.toString
+                timePartitionFld = message.timePartition.Key
+
+              }
+              count = count + 1
+
+            } else if ((f.ElemType.equals("Container")) || (f.ElemType.equals("Message"))) {
+
+              if (f.ElemType.equals("Message"))
+                throw new Exception("Adding Child Messages are not allowed in Message/Container Definition")
+
+              //val typ = MdMgr.GetMdMgr.Type(f.Ttype, ftypeVersion, true) // message.Version.toLong
+              val typ = MdMgr.GetMdMgr.Type(f.Ttype, -1, true) // message.Version.toLong
+
+              if (typ.getOrElse("None").equals("None"))
+                throw new Exception("Type not found in metadata for Name: " + f.Name + " , NameSpace: " + f.NameSpace + " , Version: " + message.Version + " , Type : " + f.Ttype)
+
+              if (typ.getOrElse(null) != null) {
+                if (typ.get.tType.toString().equals("tArrayBuf")) {
+                  val (arrayBuf_1, arrayBuf_2, arrayBuf_3, arrayBuf_4) = arrayTypeHandler.handleArrayBuffer(keys, message, typ, f, childs, prevVerMsgBaseTypesIdxArry, recompile)
+                  list = arrayBuf_1
+                  argsList = argsList ::: arrayBuf_2
+                  jarset = jarset ++ arrayBuf_3
+                  scalaclass = scalaclass.append(arrayBuf_4(0))
+                  assignCsvdata = assignCsvdata.append(arrayBuf_4(1))
+                  assignJsondata = assignJsondata.append(arrayBuf_4(2))
+                  assignXmldata = assignXmldata.append(arrayBuf_4(3))
+                  addMsg = addMsg.append(arrayBuf_4(4))
+                  msgAndCntnrsStr = msgAndCntnrsStr.append(arrayBuf_4(5))
+                  keysStr = keysStr.append(arrayBuf_4(6))
+                  getMsg = getMsg.append(arrayBuf_4(7))
+                  serializedBuf = serializedBuf.append(arrayBuf_4(8))
+                  deserializedBuf = deserializedBuf.append(arrayBuf_4(9))
+                  prevDeserializedBuf = prevDeserializedBuf.append(arrayBuf_4(10))
+                  convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(arrayBuf_4(11))
+                  collections = collections.append(arrayBuf_4(12))
+                  mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(arrayBuf_4(13))
+                  mappedMsgFieldsVar = mappedMsgFieldsVar.append(arrayBuf_4(14))
+                  mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(arrayBuf_4(15))
+                  mappedMsgFieldsArryBuffer = mappedMsgFieldsArryBuffer.append(arrayBuf_4(16))
+                  fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arrayBuf_4(17))
+                  withMethods = withMethods.append(arrayBuf_4(18))
+                  fromFuncBuf = fromFuncBuf.append(arrayBuf_4(19))
+                  assignKvData = assignKvData.append("// Not Handling Array of Container")
+                  nativeKeyMapBuf = nativeKeyMapBuf.append(arrayBuf_4(21))
+                  getNativeKeyValues = getNativeKeyValues.append(arrayBuf_4(22))
+
+
+                } else if (typ.get.tType.toString().equals("tArray")) {
+
+                  val (arr_1, arr_2, arr_3, arr_4) = arrayTypeHandler.handleArrayType(keys, typ, f, message, childs, prevVerMsgBaseTypesIdxArry, recompile)
+
+                  list = arr_1
+                  argsList = argsList ::: arr_2
+                  jarset = jarset ++ arr_3
+                  scalaclass = scalaclass.append(arr_4(0))
+                  assignCsvdata = assignCsvdata.append(arr_4(1))
+                  assignJsondata = assignJsondata.append(arr_4(2))
+                  assignXmldata = assignXmldata.append(arr_4(3))
+                  addMsg = addMsg.append(arr_4(4))
+                  msgAndCntnrsStr = msgAndCntnrsStr.append(arr_4(5))
+                  getMsg = getMsg.append(arr_4(6))
+                  serializedBuf = serializedBuf.append(arr_4(7))
+                  deserializedBuf = deserializedBuf.append(arr_4(8))
+                  prevDeserializedBuf = prevDeserializedBuf.append(arr_4(9))
+                  convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(arr_4(10))
+                  collections = collections.append(arr_4(11))
+                  mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(arr_4(12))
+                  mappedMsgFieldsArry = mappedMsgFieldsArry.append(arr_4(13))
+                  mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(arr_4(14))
+                  fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(arr_4(15))
+                  withMethods = withMethods.append(arr_4(16))
+                  fromFuncBuf = fromFuncBuf.append(arr_4(17))
+                  assignKvData = assignKvData.append("// Not Handling Array of Container")
+                  nativeKeyMapBuf = nativeKeyMapBuf.append(arr_4(19))
+                  getNativeKeyValues = getNativeKeyValues.append(arr_4(20))
+
+
+                  //       =  assignCsvdata.toString, assignJsondata.toString, assignXmldata.toString,  list, argsList, addMsg.toString)  = 
+                } else {
+
+                  if (f.ElemType.equals("Container")) {
+
+                    val (cntnr_1, cntnr_2, cntnr_3, cntnr_4) = cntTypHandler.handleContainer(message, mdMgr, ftypeVersion, f, recompile, childs)
+                    list = cntnr_1
+                    argsList = argsList ::: cntnr_2
+                    jarset = jarset ++ cntnr_3
+                    scalaclass = scalaclass.append(cntnr_4(0))
+                    assignCsvdata = assignCsvdata.append(cntnr_4(1))
+                    assignJsondata = assignJsondata.append(cntnr_4(2))
+                    assignXmldata = assignXmldata.append(cntnr_4(3))
+                    addMsg = addMsg.append(cntnr_4(4))
+                    msgAndCntnrsStr = msgAndCntnrsStr.append(cntnr_4(5))
+                    serializedBuf = serializedBuf.append(cntnr_4(6))
+                    deserializedBuf = deserializedBuf.append(cntnr_4(7))
+                    prevDeserializedBuf = prevDeserializedBuf.append(cntnr_4(8))
+                    convertOldObjtoNewObjBuf = convertOldObjtoNewObjBuf.append(cntnr_4(9))
+                    mappedPrevVerMatchkeys = mappedPrevVerMatchkeys.append(cntnr_4(10))
+                    mappedPrevTypNotMatchkeys = mappedPrevTypNotMatchkeys.append(cntnr_4(11))
+                    fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(cntnr_4(12))
+
+                    withMethods = withMethods.append(cntnr_4(13))
+                    fromFuncBuf = fromFuncBuf.append(cntnr_4(14))
+                    nativeKeyMapBuf = nativeKeyMapBuf.append(cntnr_4(15))
+                  
+                    assignKvData = assignKvData.append("// Not Handling Container")
+                    getNativeKeyValues = getNativeKeyValues.append(cntnr_4(16))
+                
+                    //   mappedPrevVerMatchkeys
+
+                  }
+                  /**
+                   * Commenting the below code since the child messages are not allowed in message def.
+                   *
+                   */
+                  /*else if (f.ElemType.equals("Message")) {
                   val (msg_1, msg_2, msg_3, msg_4, msg_5, msg_6, msg_7, msg_8, msg_9, msg_10, msg_11, msg_12, msg_13, msg_14, msg_15) = handleMessage(mdMgr, ftypeVersion, f, message, childs, recompile)
                   scalaclass = scalaclass.append(msg_1)
                   assignCsvdata = assignCsvdata.append(msg_2)
@@ -413,23 +443,23 @@ class MessageFldsExtractor {
                 }
                 * */
 
+                }
               }
+            } else if (f.ElemType.equals("Concept")) {
+              val (ccpt_1, ccpt_2, ccpt_3, ccpt_4, ccpt_5, ccpt_6, ccpt_7, ccpt_8, ccpt_9, ccpt_10, ccpt_11) = ccptTypHandler.handleConcept(mdMgr, ftypeVersion, f, message)
+              scalaclass = scalaclass.append(ccpt_1)
+              assignCsvdata = assignCsvdata.append(ccpt_2)
+              assignJsondata = assignJsondata.append(ccpt_3)
+              assignXmldata = assignXmldata.append(ccpt_4)
+              list = ccpt_5
+              argsList = argsList ::: ccpt_6
+              addMsg = addMsg.append(ccpt_7)
+              jarset = jarset ++ ccpt_8
+              fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(ccpt_9)
+              withMethods = withMethods.append(ccpt_10)
+              fromFuncBuf = fromFuncBuf.append(ccpt_11)
             }
-          } else if (f.ElemType.equals("Concept")) {
-            val (ccpt_1, ccpt_2, ccpt_3, ccpt_4, ccpt_5, ccpt_6, ccpt_7, ccpt_8, ccpt_9, ccpt_10, ccpt_11) = ccptTypHandler.handleConcept(mdMgr, ftypeVersion, f, message)
-            scalaclass = scalaclass.append(ccpt_1)
-            assignCsvdata = assignCsvdata.append(ccpt_2)
-            assignJsondata = assignJsondata.append(ccpt_3)
-            assignXmldata = assignXmldata.append(ccpt_4)
-            list = ccpt_5
-            argsList = argsList ::: ccpt_6
-            addMsg = addMsg.append(ccpt_7)
-            jarset = jarset ++ ccpt_8
-            fixedMsgGetKeyStrBuf = fixedMsgGetKeyStrBuf.append(ccpt_9)
-            withMethods = withMethods.append(ccpt_10)
-            fromFuncBuf = fromFuncBuf.append(ccpt_11)
           }
-
         }
       if (message.concepts != null) {
 
@@ -437,6 +467,7 @@ class MessageFldsExtractor {
 
       var partitionKeys: String = ""
       var prmryKeys: String = ""
+
       if (message.Fixed.toLowerCase().equals("false")) {
 
         //if (keysStr != null && keysStr.toString.trim != "")
@@ -455,7 +486,9 @@ class MessageFldsExtractor {
       } else if (message.Fixed.toLowerCase().equals("true")) {
         partitionKeys = if (message.PartitionKey != null && message.PartitionKey.size > 0) ("Array(" + message.PartitionKey.map(p => p.toLowerCase + ".toString").mkString(", ") + ")") else ""
         prmryKeys = if (message.PrimaryKeys != null && message.PrimaryKeys.size > 0) ("Array(" + message.PrimaryKeys.map(p => p.toLowerCase + ".toString").mkString(", ") + ")") else ""
+
       }
+
       /*
       var partitionKeyStr = new StringBuilder(8 * 1024)
       if (message.PartitionKey != null)
@@ -506,6 +539,10 @@ class MessageFldsExtractor {
     returnClassStr += fromFuncBuf.toString
     returnClassStr += fromFuncBaseTypesBuf.toString
     returnClassStr += assignKvData.toString
+    returnClassStr += timePartitionFld.toString
+    returnClassStr += timePartitionPos.toString
+    returnClassStr += nativeKeyMapBuf.toString
+    returnClassStr += getNativeKeyValues.toString
 
     (returnClassStr.toArray, count, list, argsList, partitionPos, primaryPos)
 

@@ -28,7 +28,6 @@ import scala.collection.mutable.TreeSet
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.ligadata.Serialize._
-import com.ligadata.KamanjaData.KamanjaData
 import com.ligadata.MetadataAPI.MetadataAPIImpl
 import com.ligadata.kamanja.metadata.MdMgr._
 import com.ligadata.kamanja.metadata._
@@ -37,20 +36,20 @@ import com.ligadata.KamanjaBase._
 import com.ligadata.kamanja.metadataload.MetadataLoad
 import com.ligadata.Utils.{ Utils, KamanjaClassLoader, KamanjaLoaderInfo }
 import com.ligadata.Serialize.{ JDataStore }
-import com.ligadata.StorageBase.{ Key, Value, IStorage, DataStoreOperations, DataStore, Transaction, StorageAdapterObj }
+import com.ligadata.KvBase.{ Key, Value, TimeRange }
+import com.ligadata.StorageBase.{ DataStore, Transaction }
 import com.ligadata.Exceptions.StackTrace
-
-case class KamanjaDataKey(T: String, K: List[String], D: List[Int], V: Int)
+import java.util.Date
+import java.text.SimpleDateFormat
 
 object ExtractData extends MdBaseResolveInfo {
   private val LOG = Logger.getLogger(getClass);
   private val clsLoaderInfo = new KamanjaLoaderInfo
-  private val _serInfoBufBytes = 32
   private var _currentMessageObj: BaseMsgObj = null
   private var _currentContainerObj: BaseContainerObj = null
   private var _currentTypName: String = ""
   private var jarPaths: Set[String] = null
-  private var _allDataDataStore: DataStore = null
+  private var _dataStore: DataStore = null
 
   private type OptionMap = Map[Symbol, Any]
 
@@ -141,44 +140,7 @@ object ExtractData extends MdBaseResolveInfo {
   }
 
   private def GetCurDtTmStr: String = {
-    new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new java.util.Date(System.currentTimeMillis))
-  }
-
-  private def getSerializeInfo(tupleBytes: Value): String = {
-    if (tupleBytes.size < _serInfoBufBytes) return ""
-    val serInfoBytes = new Array[Byte](_serInfoBufBytes)
-    tupleBytes.copyToArray(serInfoBytes, 0, _serInfoBufBytes)
-    return (new String(serInfoBytes)).trim
-  }
-
-  private def getValueInfo(tupleBytes: Value): Array[Byte] = {
-    if (tupleBytes.size < _serInfoBufBytes) return null
-    val valInfoBytes = new Array[Byte](tupleBytes.size - _serInfoBufBytes)
-    Array.copy(tupleBytes.toArray, _serInfoBufBytes, valInfoBytes, 0, tupleBytes.size - _serInfoBufBytes)
-    valInfoBytes
-  }
-
-  private def buildObject(tupleBytes: Value, objs: Array[KamanjaData]): Unit = {
-    // Get first _serInfoBufBytes bytes
-    if (tupleBytes.size < _serInfoBufBytes) {
-      val errMsg = s"Invalid input. This has only ${tupleBytes.size} bytes data. But we are expecting serializer buffer bytes as of size ${_serInfoBufBytes}"
-      logger.error(errMsg)
-      throw new Exception(errMsg)
-    }
-
-    val serInfo = getSerializeInfo(tupleBytes)
-
-    serInfo.toLowerCase match {
-      case "manual" => {
-        val valInfo = getValueInfo(tupleBytes)
-        val datarec = new KamanjaData
-        datarec.DeserializeData(valInfo, this, clsLoaderInfo.loader)
-        objs(0) = datarec
-      }
-      case _ => {
-        throw new Exception("Found un-handled Serializer Info: " + serInfo)
-      }
-    }
+    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date(System.currentTimeMillis))
   }
 
   private def resolveCurretType(typName: String): Unit = {
@@ -286,10 +248,10 @@ object ExtractData extends MdBaseResolveInfo {
     }
   }
 
-  private def GetDataStoreHandle(jarPaths: collection.immutable.Set[String], dataStoreInfo: String, tableName: String): DataStore = {
+  private def GetDataStoreHandle(jarPaths: collection.immutable.Set[String], dataStoreInfo: String): DataStore = {
     try {
-      logger.debug("Getting DB Connection for dataStoreInfo:%s, tableName:%s".format(dataStoreInfo, tableName))
-      return KeyValueManager.Get(jarPaths, dataStoreInfo, tableName)
+      logger.debug("Getting DB Connection for dataStoreInfo:%s".format(dataStoreInfo))
+      return KeyValueManager.Get(jarPaths, dataStoreInfo)
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -299,54 +261,23 @@ object ExtractData extends MdBaseResolveInfo {
     }
   }
 
-  private def makeKey(key: String): Key = {
-    var k = new Key
-    k ++= key.getBytes("UTF8")
-    k
-  }
-
-  private def loadObjFromDb(key: List[String]): KamanjaData = {
-    val partKeyStr = KamanjaData.PrepareKey(_currentTypName, key, 0, 0)
-    var objs: Array[KamanjaData] = new Array[KamanjaData](1)
-    val buildOne = (tupleBytes: Value) => { buildObject(tupleBytes, objs) }
-    try {
-      _allDataDataStore.get(makeKey(partKeyStr), buildOne)
-    } catch {
-      case e: Exception => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("1. Data not found for key:" + partKeyStr + "\nStackTrace:" + stackTrace)
+  private def deSerializeData(v: Value): MessageContainerBase = {
+    v.serializerType.toLowerCase match {
+      case "manual" => {
+        return SerializeDeserialize.Deserialize(v.serializedInfo, this, clsLoaderInfo.loader, true, "")
+      }
+      case _ => {
+        throw new Exception("Found un-handled Serializer Info: " + v.serializerType)
       }
     }
-    return objs(0)
   }
 
-  private def collectKey(key: Key, keys: ArrayBuffer[KamanjaDataKey]): Unit = {
-    implicit val jsonFormats = org.json4s.DefaultFormats
-    val parsed_key = org.json4s.jackson.JsonMethods.parse(new String(key.toArray)).extract[KamanjaDataKey]
-    keys += parsed_key
-  }
-
-  private def extractData(compressionString: String, sFileName: String, partKey: List[String], primaryKey: List[String]): Unit = {
-    val partKeys = ArrayBuffer[List[String]]()
-    if (partKey == null || partKey.size == 0) {
-      LOG.debug("Getting all Partition Keys")
-      // Getting all keys if no partition key specified
-      val all_keys = ArrayBuffer[KamanjaDataKey]() // All keys for all tables for now
-      val keyCollector = (key: Key) => { collectKey(key, all_keys) }
-      _allDataDataStore.getAllKeys(keyCollector)
-      // LOG.debug("Got all Keys: " + all_keys.map(k => (k.T + " -> " + k.K.mkString(","))).mkString(":"))
-      val keys = all_keys.filter(k => k.T.compareTo(_currentTypName) == 0).toArray
-      partKeys ++= keys.map(k => k.K)
-      LOG.debug("Got all Partition Keys: " + partKeys.map(k => k.mkString(",")).mkString(":"))
-    } else {
-      LOG.debug("Got Partition Key: " + partKey.mkString(","))
-      partKeys += partKey
-    }
-
+  private def extractData(startTm: Date, endTm: Date, compressionString: String, sFileName: String, partKey: List[String], primaryKey: List[String]): Unit = {
     val hasValidPrimaryKey = (partKey != null && primaryKey != null && partKey.size > 0 && primaryKey.size > 0)
 
     var os: OutputStream = null
     val gson = new Gson();
+
     try {
       val compString = if (compressionString == null) null else compressionString.trim
 
@@ -360,26 +291,29 @@ object ExtractData extends MdBaseResolveInfo {
 
       val ln = "\n".getBytes("UTF8")
 
-      partKeys.foreach(partkeyval => {
-        val loadedFfData = loadObjFromDb(partkeyval)
-        if (loadedFfData != null) {
+      val getObjFn = (k: Key, v: Value) => {
+        val dta = deSerializeData(v)
+        if (dta != null) {
           if (hasValidPrimaryKey) {
             // Search for primary key match
-            val v = loadedFfData.GetMessageContainerBase(primaryKey.toArray, false)
-            LOG.debug("Does Primarykey Found: " + (if (v == null) "false" else "true"))
-            if (v != null) {
-              os.write(gson.toJson(v).getBytes("UTF8"));
+            if (primaryKey.sameElements(dta.PrimaryKeyData)) {
+              LOG.debug("Primarykey found")
+              os.write(gson.toJson(dta).getBytes("UTF8"));
               os.write(ln);
             }
           } else {
             // Write the whole list
-            loadedFfData.GetAllData.foreach(v => {
-              os.write(gson.toJson(v).getBytes("UTF8"));
-              os.write(ln);
-            })
+            os.write(gson.toJson(dta).getBytes("UTF8"));
+            os.write(ln);
           }
         }
-      })
+      }
+
+      if (partKey == null || partKey.size == 0) {
+        _dataStore.get(_currentTypName, Array(TimeRange(startTm.getTime(), endTm.getTime())), getObjFn)
+      } else {
+        _dataStore.get(_currentTypName, Array(TimeRange(startTm.getTime(), endTm.getTime())), Array(partKey.toArray), getObjFn)
+      }
 
       // Close file
       if (os != null)
@@ -396,6 +330,7 @@ object ExtractData extends MdBaseResolveInfo {
         throw new Exception("%s:Exception. Message:%s, Reason:%s".format(GetCurDtTmStr, e.getMessage, e.getCause))
       }
     }
+
   }
 
   def main(args: Array[String]): Unit = {
@@ -465,45 +400,35 @@ object ExtractData extends MdBaseResolveInfo {
         LOG.error("DataStore not found for Node %d  & ClusterId : %s".format(nodeId, nodeInfo.ClusterId))
         sys.exit(1)
       }
-      /*
-      var dataStoreInfo: JDataStore = null
 
-      {
-        implicit val jsonFormats = org.json4s.DefaultFormats
-        dataStoreInfo = org.json4s.jackson.JsonMethods.parse(dataStore).extract[JDataStore]
-      }
-
-      val dataStoreType = dataStoreInfo.StoreType.replace("\"", "").trim
-      if (dataStoreType.size == 0) {
-        LOG.error("Not found valid DataStoreType.")
-        sys.exit(1)
-      }
-
-      val dataSchemaName = dataStoreInfo.SchemaName.replace("\"", "").trim
-      if (dataSchemaName.size == 0) {
-        LOG.error("Not found valid DataSchemaName.")
-        sys.exit(1)
-      }
-
-      val dataLocation = dataStoreInfo.Location.replace("\"", "").trim
-      if (dataLocation.size == 0) {
-        LOG.error("Not found valid DataLocation.")
-        sys.exit(1)
-      }
-      
-      val adapterSpecificConfig = if (dataStoreInfo.AdapterSpecificConfig == None || dataStoreInfo.AdapterSpecificConfig == null) "" else dataStoreInfo.AdapterSpecificConfig.get.replace("\"", "").trim
-*/
       resolveCurretType(typName)
 
-      _allDataDataStore = GetDataStoreHandle(jarPaths, dataStore, "AllData")
+      _dataStore = GetDataStoreHandle(jarPaths, dataStore)
 
+      val stTmStr = loadConfigs.getProperty("StartTime".toLowerCase, "").replace("\"", "").trim // Expecting in the format of "yyyy-MM-dd HH:mm:ss"
+      val edTmStr = loadConfigs.getProperty("EndTime".toLowerCase, "").replace("\"", "").trim // Expecting in the format of "yyyy-MM-dd HH:mm:ss"
       val partKey = loadConfigs.getProperty("PartitionKey".toLowerCase, "").replace("\"", "").trim.split(",").map(_.trim.toLowerCase).filter(_.size > 0).toList
       val primaryKey = loadConfigs.getProperty("PrimaryKey".toLowerCase, "").replace("\"", "").trim.split(",").map(_.trim).filter(_.size > 0).toList
 
       val flName = loadConfigs.getProperty("OutputFile".toLowerCase, "").replace("\"", "").trim
       val compression = loadConfigs.getProperty("Compression".toLowerCase, "").replace("\"", "").trim.toLowerCase
 
-      extractData(compression, flName, partKey, primaryKey)
+      val dtFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+      val startTm =
+        if (stTmStr.size == 0) {
+          new Date(0)
+        } else {
+          dtFormat.parse(stTmStr)
+        }
+
+      val endTm =
+        if (edTmStr.size == 0) {
+          new Date(Long.MaxValue)
+        } else {
+          dtFormat.parse(edTmStr)
+        }
+
+      extractData(startTm, endTm, compression, flName, partKey, primaryKey)
 
       exitCode = 0
     } catch {
@@ -512,9 +437,9 @@ object ExtractData extends MdBaseResolveInfo {
         exitCode = 1
       }
     } finally {
-      if (_allDataDataStore != null)
-        _allDataDataStore.Shutdown
-      _allDataDataStore = null
+      if (_dataStore != null)
+        _dataStore.Shutdown
+      _dataStore = null
     }
 
     sys.exit(exitCode)

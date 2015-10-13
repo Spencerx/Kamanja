@@ -34,7 +34,7 @@ object KeyValueManager {
   // We will add more implementations here 
   // so we can test  the system characteristics
   //
-  def Get(jarPaths: collection.immutable.Set[String], datastoreConfig: String, tableName: String): DataStore = {
+  def Get(jarPaths: collection.immutable.Set[String], datastoreConfig: String): DataStore = {
     val adapterConfig = if (datastoreConfig != null) datastoreConfig.trim else ""
 
     if (adapterConfig.size == 0) {
@@ -60,7 +60,7 @@ object KeyValueManager {
     val storeType = parsed_json.getOrElse("StoreType", "").toString.trim.toLowerCase
 
     storeType match {
-
+      /*
       // Other KV stored
       case "cassandra" => return KeyValueCassandra.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
       case "hbase" => return KeyValueHBase.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
@@ -68,9 +68,13 @@ object KeyValueManager {
       case "treemap" => return KeyValueTreeMap.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
       case "hashmap" => return KeyValueHashMap.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
       case "redis" => return KeyValueRedis.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
+*/
+      // Other relational stores such as sqlserver, mysql
+      case "sqlserver" => return SqlServerAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
 
       // Default, Load it from Class
       case _ => {
+        /*
         val (className, jarName, dependencyJars) = getClassNameJarNameDepJarsFromJson(parsed_json)
         logger.debug("className:%s, jarName:%s, dependencyJars:%s".format(className, jarName, dependencyJars))
         if (className != null && className.size > 0 && jarName != null && jarName.size > 0) {
@@ -146,9 +150,14 @@ object KeyValueManager {
             return null
           }
         }
-        return null
+*/
+        val errMsg = "Failed to instantiate Storage Adapter with configuration:" + adapterConfig
+        logger.error(errMsg)
+        throw new Exception(errMsg)
       }
     }
-    return null
+    val errMsg = "Failed to instantiate Storage Adapter with configuration:" + adapterConfig
+    logger.error(errMsg)
+    throw new Exception(errMsg)
   }
 }

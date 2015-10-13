@@ -34,6 +34,7 @@ import com.ligadata.MetadataAPI.MetadataAPIImpl
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.ligadata.Utils.{ Utils, KamanjaClassLoader, KamanjaLoaderInfo }
 import com.ligadata.Exceptions.StackTrace
+import com.ligadata.KamanjaBase.{ EnvContext, ContainerNameAndDatastoreInfo }
 
 class TransformMsgFldsMap(var keyflds: Array[Int], var outputFlds: Array[Int]) {
 }
@@ -559,7 +560,8 @@ object KamanjaMetadata extends MdBaseResolveInfo {
       messageContainerObjects ++= contObjects
       if (envCtxt != null) {
         val containerNames = contObjects.map(container => container._1.toLowerCase).toList.sorted.toArray // Sort topics by names
-        envCtxt.AddNewMessageOrContainers(KamanjaConfiguration.dataDataStoreInfo, containerNames, true, KamanjaConfiguration.statusDataStoreInfo, KamanjaConfiguration.jarPaths) // Containers
+        val containerInfos = containerNames.map(c => { ContainerNameAndDatastoreInfo(c, null) })
+        envCtxt.RegisterMessageOrContainers(containerInfos) // Containers
       }
     }
 
@@ -568,7 +570,8 @@ object KamanjaMetadata extends MdBaseResolveInfo {
       messageContainerObjects ++= msgObjects
       if (envCtxt != null) {
         val topMessageNames = msgObjects.filter(msg => msg._2.parents.size == 0).map(msg => msg._1.toLowerCase).toList.sorted.toArray // Sort topics by names
-        envCtxt.AddNewMessageOrContainers(KamanjaConfiguration.dataDataStoreInfo, topMessageNames, false, KamanjaConfiguration.statusDataStoreInfo, KamanjaConfiguration.jarPaths) // Messages
+        val messagesInfos = topMessageNames.map(c => { ContainerNameAndDatastoreInfo(c, null) })
+        envCtxt.RegisterMessageOrContainers(messagesInfos) // Messages
       }
     }
 

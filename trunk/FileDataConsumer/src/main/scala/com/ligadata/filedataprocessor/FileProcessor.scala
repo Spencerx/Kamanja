@@ -20,9 +20,13 @@ import java.nio.file.Paths.get
 
 case class BufferLeftoversArea (workerNumber: Int, leftovers: Array[Char], relatedChunk: Int)
 case class BufferToChunk(len: Int, payload: Array[Char], chunkNumber: Int, relatedFileName: String, firstValidOffset: Int)
-case class KafkaMessage (msg: Array[Char], offsetInFile: Int, isLast: Boolean, relatedFileName: String)
+case class KafkaMessage (msg: Array[Char], offsetInFile: Int, isLast: Boolean, isLastDummy: Boolean, relatedFileName: String)
 case class EnqueuedFile (name: String, offset: Int)
 
+object FileProcessor {
+  private var initReconveryLock = new Object
+  private var numberOfReadyConsumers = 0
+}
 /**
  *
  * @param path
@@ -71,7 +75,9 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
   private var partitionSelectionNumber: Int = _
   private var localMetadataConfig = ""
   private var kafkaTopic = ""
+  private var readyToProcessKey = ""
 
+  private var isRecoveryOps = true
 
   /**
    * Called by the Directory Listener to initialize
@@ -83,6 +89,7 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
     NUMBER_OF_BEES = props.getOrElse(SmartFileAdapterConstants.PAR_DEGREE_OF_FILE_CONSUMER, "1").toInt
     maxlen = props.getOrElse(SmartFileAdapterConstants.WORKER_BUFFER_SIZE, "4").toInt * 1024 * 1024
     partitionSelectionNumber = props(SmartFileAdapterConstants.NUMBER_OF_FILE_CONSUMERS).toInt
+    readyToProcessKey = props.getOrElse(SmartFileAdapterConstants.READY_MESSAGE_MASK, ".gzip")
 
     kafkaTopic = props.getOrElse(SmartFileAdapterConstants.KAFKA_TOPIC, null)
 
@@ -263,7 +270,7 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
              msgNum += 1
              logger.debug("SMART_FILE_CONSUMER Message offset " + msgNum + ", and the buffer offset is " + buffer.firstValidOffset)
              if ( buffer.firstValidOffset < msgNum)
-               messages.add(new KafkaMessage(newMsg, msgNum, false, buffer.relatedFileName))
+               messages.add(new KafkaMessage(newMsg, msgNum, false, false,  buffer.relatedFileName))
              prevIndx = indx + 1
            }
            indx = indx + 1
@@ -288,7 +295,7 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
 
              // Prepend the leftovers to the first element of the array of messages
              val msgArray = messages.toArray
-             val firstMsgWithLefovers = new KafkaMessage(leftOvers ++ msgArray(0).msg, msgArray(0).offsetInFile, false, buffer.relatedFileName)
+             val firstMsgWithLefovers = new KafkaMessage(leftOvers ++ msgArray(0).msg, msgArray(0).offsetInFile, false, false, buffer.relatedFileName)
              msgArray(0) = firstMsgWithLefovers
              enQMsg(msgArray, beeNumber)
            } else {
@@ -350,6 +357,9 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
       bis = new BufferedReader(new InputStreamReader(new FileInputStream(fileName)))
     }
 
+    // record the file offset for the last message to be able to tell.
+    setOffsetForFile(fileName, 0)
+
     // Intitialize the leftover area for this file reading.
     var newFileLeftOvers = BufferLeftoversArea(0, Array[Char](), -1)
     setLeftovers(newFileLeftOvers, 0)
@@ -376,11 +386,11 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
         // EnqMsg here.. but only if there is something in there.
         if (myLeftovers.leftovers.size > 0) {
           var messages: scala.collection.mutable.LinkedHashSet[KafkaMessage] = scala.collection.mutable.LinkedHashSet[KafkaMessage]()
-          messages.add(new KafkaMessage(myLeftovers.leftovers, getKnownOffset(fileName)._1 + 1, true, fileName))
+          messages.add(new KafkaMessage(myLeftovers.leftovers, getKnownOffset(fileName)._1 + 1, true, false, fileName))
           enQMsg(messages.toArray, 1000)
         } else {
           var messages: scala.collection.mutable.LinkedHashSet[KafkaMessage] = scala.collection.mutable.LinkedHashSet[KafkaMessage]()
-          messages.add(new KafkaMessage(null, -1, true, fileName))
+          messages.add(new KafkaMessage(null, getKnownOffset(fileName)._1, true, true, fileName))
           enQMsg(messages.toArray, 1000)
         }
         foundRelatedLeftovers = true
@@ -389,7 +399,15 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
       }
     }
     // Done with this file... mark is as closed
-    markFileAsFinished(fileName)
+    try {
+      markFileAsFinished(fileName)
+    } catch {
+      case nsee: NoSuchElementException => {
+        logger.warn("SMART FILE CONSUMER: partition " +partitionId + " Unable to detect file as being processed " + fileName)
+        logger.warn("SMART FILE CONSUMER: Check to make sure the input directory does not still contain this file")
+      }
+    }
+
   }
 
   /**
@@ -405,7 +423,18 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
       } else {
         logger.info("SMART_FILE_CONSUMER partition "+partitionId + " Processing file "+fileToProcess)
         curTimeStart = System.currentTimeMillis
-        readBytesChunksFromFile(fileToProcess)
+        try {
+          readBytesChunksFromFile(fileToProcess)
+        } catch {
+          case fnfe: java.io.FileNotFoundException => {
+            // If we are in the middle of recovery, and we dont find the file in the directory remove it from our internal
+            // tracking mechanisms
+            if (isRecoveryOps)
+              kml.clearRecoveryArea
+            logger.warn("SMART_FILE_CONSUMER partition "+partitionId + " "+fileToProcess.name + " not found")
+            println("SMART_FILE_CONSUMER partition "+partitionId + " "+fileToProcess.name + " not found")
+          }
+        }
         curTimeEnd = System.currentTimeMillis
       }
     }
@@ -431,6 +460,9 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
    *
    */
   private def monitorBufferingFiles: Unit = {
+    // This guys will keep track of when to exgernalize a WARNING Message.  Since this loop really runs every second,
+    // we want to throttle the warning messages.
+    var specialWarnCounter: Int = 1
     while (isCosuming) {
       // Scan all the files that we are buffering, if there is not difference in their file size.. move them onto
       // the FileQ, they are ready to process.
@@ -443,9 +475,17 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
             // If the the new length of the file is the same as a second ago... this file is done, so move it
             // onto the ready to process q.  Else update the latest length
             if (fileTuple._2 == d.length) {
-              logger.info("SMART_FILE_CONSUMER partition "+partitionId + "  File READY TO PROCESS " + d.toString)
-              enQFile(fileTuple._1, 0)
-              bufferingQ_map.remove(fileTuple._1)
+              if (d.length > 0) {
+                logger.info("SMART_FILE_CONSUMER partition "+partitionId + "  File READY TO PROCESS " + d.toString)
+                enQFile(fileTuple._1, 0)
+                bufferingQ_map.remove(fileTuple._1)
+              } else {
+                if ((specialWarnCounter % 500) == 0 ) {
+                  logger.warn("SMART_FILE_CONSUMER partition "+partitionId + "  Detected a delay in creation of file " + d.toString)
+                  logger.warn("SMART_FILE_CONSUMER partition "+partitionId + " This file could also be empty ")
+                }
+                specialWarnCounter += 1
+              }
             } else {
               bufferingQ_map(fileTuple._1) = d.length
             }
@@ -470,7 +510,6 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
    */
   override def run(): Unit = {
     try {
-
 
       // Initialize and launch the File Processor thread(s), and kafka producers
       fileConsumers.execute(new Runnable() {
@@ -501,18 +540,34 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
         if (priorFailures != null) {
           var map = parse(new String(priorFailures)).values.asInstanceOf[Map[String, Any]]
           if (map != null) map.foreach(fileToReprocess => {
+            println("SMART FILE CONSUMER: Consumer " + partitionId + " "+ fileToReprocess._1.asInstanceOf[String])
+            logger.info("SMART FILE CONSUMER: Consumer " + partitionId + " "+ fileToReprocess._1.asInstanceOf[String])
             enQFile(fileToReprocess._1.asInstanceOf[String], fileToReprocess._2.asInstanceOf[BigInt].intValue)
             if (d.exists && d.isDirectory) {
-              var files = d.listFiles.filter(_.isFile)
+              var files = d.listFiles.filter(file => {file.isFile && file.getName.equals(fileToReprocess._1.asInstanceOf[String])})
               while (files.size != 0) {
                 Thread.sleep(1000)
-                files = d.listFiles.filter(_.isFile)
+                files = d.listFiles.filter(file => {file.isFile && file.getName.equals(fileToReprocess._1.asInstanceOf[String])})
               }
             }
           })
         }
-
       }
+
+      isRecoveryOps = false
+      // No locking is needed. this counter is only increasing
+      FileProcessor.initReconveryLock.synchronized {
+        FileProcessor.numberOfReadyConsumers +=  1
+        println("SMART FILE CONSUMER: Consumer " + partitionId + " finished recovery operations.")
+        logger.info("SMART FILE CONSUMER: Consumer " + partitionId + " finished recovery operations.")
+      }
+      // Here we need to Pause and wait for all other consumers to finish processing their failures....
+      while (FileProcessor.numberOfReadyConsumers < partitionSelectionNumber) {
+           Thread.sleep(1000)
+      }
+
+      println("SMART FILE CONSUMER: Consumer " + partitionId + " Continuing Startup process.")
+      logger.info("SMART FILE CONSUMER: Consumer " + partitionId + " Continuing Startup process")
 
       // Process all the existing files in the directory that are not marked complete.
       if (d.exists && d.isDirectory) {
@@ -520,17 +575,37 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
         files.foreach(file => {
           var assignment =  scala.math.abs(file.toString.hashCode) % partitionSelectionNumber
           if ((assignment+ 1) == partitionId) {
-            if (isValidFile(file.toString)) {
-              enQBufferedFile(file.toString)
+            if (isValidFile(file.toString) && file.toString.endsWith(readyToProcessKey)) {
+              var assignment =  scala.math.abs(file.toString.hashCode) % partitionSelectionNumber
+              if ((assignment+ 1) == partitionId) {
+                println("SMART_FILE_CONSUMER partition " + partitionId +" Processing "+ file.toString)
+                logger.info("SMART_FILE_CONSUMER partition " + partitionId +" Processing "+ file.toString)
+                enQBufferedFile(file.toString)
+              }
             }
           }
         })
       }
-      logger.info("SMART_FILE_CONSUMER partition " +partitionId + " Initialization complete for partition " + partitionId)
+
+      // Ok, finished processing existing files in the directory.
+      // No locking is needed. this counter is only increasing
+      FileProcessor.initReconveryLock.synchronized {
+        FileProcessor.numberOfReadyConsumers +=  1
+        println("SMART FILE CONSUMER: Consumer " + partitionId + " finished startup operations.")
+        logger.info("SMART FILE CONSUMER: Consumer " + partitionId + " finished startup operations.")
+      }
+      // Here we need to Pause and wait for all other consumers to finish processing their failures....
+      while (FileProcessor.numberOfReadyConsumers < (2 * partitionSelectionNumber)) {
+        Thread.sleep(1000)
+      }
+
+      logger.info("SMART_FILE_CONSUMER partition " +partitionId + " Initialization complete for partition " + partitionId + " Monitoring specidfied directory for new files")
+      println("SMART_FILE_CONSUMER partition " +partitionId + " Initialization complete for partition " + partitionId + " Monitoring specidfied directory for new files")
 
       // Begin the listening process, TAKE()
       breakable {
         while (isCosuming) {
+          println("SMART_FILE_CONSUMER partition " + partitionId + " awaiting work")
           val key = watchService.take()
           val dir = keys.getOrElse(key, null)
           if(dir != null) {
@@ -542,10 +617,18 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
                 val event_path = event.context().asInstanceOf[Path]
                 val fileName = dirToWatch + "/" + event_path.toString
 
-                var assignment =  scala.math.abs(fileName.hashCode) % partitionSelectionNumber
-                if ((assignment+ 1) == partitionId) {
-                  if (isValidFile(fileName)) {
-                    enQBufferedFile(fileName)
+                if (fileName.endsWith(readyToProcessKey)) {
+                  var assignment =  scala.math.abs(fileName.hashCode) % partitionSelectionNumber
+                  if ((assignment+ 1) == partitionId) {
+                    if (isValidFile(fileName)) {
+                      if (!kml.checkIfFileBeingProcessed(fileName)) {
+                        println("SMART_FILE_CONSUMER partition " + partitionId + " QUEUEING("+kind+") " + fileName)
+                        enQBufferedFile(fileName)
+                      } else {
+                        println(partitionId + " ABORT QUEUEING("+kind+") this (file by the same name already queued) " + fileName)
+                      }
+
+                    }
                   }
                 }
               }
@@ -590,6 +673,9 @@ class FileProcessor(val path:Path, val partitionId: Int) extends Runnable {
     try {
       is = new FileInputStream(inputfile)
     } catch {
+      case fnfe: FileNotFoundException => {
+        throw fnfe
+      }
       case e: Exception =>
         val stackTrace = StackTrace.ThrowableTraceString(e)
         e.printStackTrace()

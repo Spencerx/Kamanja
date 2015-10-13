@@ -150,8 +150,10 @@ class KamanjaManager extends Observer {
   }
 
   private def Shutdown(exitCode: Int): Int = {
+  /*
     if (KamanjaMetadata.envCtxt != null)
       KamanjaMetadata.envCtxt.PersistRemainingStateEntriesOnLeader
+*/
     if (heartBeat != null)
       heartBeat.Shutdown
     heartBeat = null
