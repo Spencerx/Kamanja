@@ -127,5 +127,5 @@ elif [ "$INPUT" = "push data" ]; then
 #echo "User selected: $INPUTFILE"
 #$INPUTFILE
 else
-java -jar $KAMANJA_HOME/bin/MetadataAPI-1.0 $INPUT
+java -Dlog4j.configurationFile=file:$KAMANJA_HOME/config/log4j2.xml -jar $KAMANJA_HOME/bin/MetadataAPI-1.0 $INPUT
 fi

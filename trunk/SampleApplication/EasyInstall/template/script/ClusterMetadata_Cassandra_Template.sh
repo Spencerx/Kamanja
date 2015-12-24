@@ -6,9 +6,9 @@
 ipport="8998"
 
 if [ "$1" != "debug" ]; then
-	java -Dlog4j.configuration=file:{InstallDirectory}/config/log4j.properties -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/config/ClusterCfgMetadataAPIConfig_Cassandra.properties
+	java -Dlog4j.configurationFile=file:{InstallDirectory}/config/log4j.properties -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/config/ClusterCfgMetadataAPIConfig_Cassandra.properties
 else
-	java -Xdebug -Xrunjdwp:transport=dt_socket,address="$ipport",server=y -Dlog4j.configuration=file:{InstallDirectory}/config/log4j.properties -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/config/ClusterCfgMetadataAPIConfig_Cassandra.properties
+	java -Xdebug -Xrunjdwp:transport=dt_socket,address="$ipport",server=y -Dlog4j.configurationFile=file:{InstallDirectory}/config/log4j.properties -jar {InstallDirectory}/bin/MetadataAPI-1.0 --config {InstallDirectory}/config/ClusterCfgMetadataAPIConfig_Cassandra.properties
 fi
 
 

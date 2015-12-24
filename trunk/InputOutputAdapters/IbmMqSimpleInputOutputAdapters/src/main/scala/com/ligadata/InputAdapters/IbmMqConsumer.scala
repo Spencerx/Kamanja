@@ -19,7 +19,7 @@ package com.ligadata.InputAdapters
 import scala.actors.threadpool.{ Executors, ExecutorService }
 import java.util.Properties
 import scala.collection.mutable.ArrayBuffer
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.InputOutputAdapterInfo.{ AdapterConfiguration, InputAdapter, InputAdapterObj, OutputAdapter, ExecContext, ExecContextObj, CountersAdapter, PartitionUniqueRecordKey, PartitionUniqueRecordValue, StartProcPartInfo, InputAdapterCallerContext }
 import com.ligadata.AdaptersConfiguration.{ IbmMqAdapterConfiguration, IbmMqPartitionUniqueRecordKey, IbmMqPartitionUniqueRecordValue }
 import javax.jms.{ Connection, Destination, JMSException, Message, MessageConsumer, Session, TextMessage, BytesMessage }
@@ -62,7 +62,7 @@ class IbmMqConsumer(val inputConfig: AdapterConfiguration, val callerCtxt: Input
     }
   }
 
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
 
   //BUGBUG:: Not Checking whether inputConfig is really QueueAdapterConfiguration or not. 
   private[this] val qc = IbmMqAdapterConfiguration.GetAdapterConfig(inputConfig)

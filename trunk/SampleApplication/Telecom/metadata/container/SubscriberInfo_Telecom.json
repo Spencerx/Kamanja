@@ -1,6 +1,6 @@
 {
   "Container": {
-	"NameSpace": "System",
+	"NameSpace": "com.ligadata.kamanja.samples.containers",
 	"Name": "SubscriberInfo",
 	"Version": "00.01.00",
 	"Description": "Subscriber Information",

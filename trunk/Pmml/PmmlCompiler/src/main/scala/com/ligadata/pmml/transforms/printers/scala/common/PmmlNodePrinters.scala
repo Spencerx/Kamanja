@@ -20,7 +20,7 @@ import scala.collection.mutable._
 import scala.math._
 import scala.collection.immutable.StringLike
 import scala.util.control.Breaks._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata._
 import com.ligadata.pmml.compiler._
 import com.ligadata.pmml.support._
@@ -887,6 +887,7 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		commentBuffer.append(s"import com.ligadata.pmml.udfs._\n")
 		commentBuffer.append(s"import com.ligadata.pmml.udfs.Udfs._\n")
 		commentBuffer.append(s"import com.ligadata.pmml.runtime._\n")
+		commentBuffer.append(s"import com.ligadata.kamanja.metadata.ModelDef;\n")
 		//commentBuffer.append(s"import com.ligadata.KamanjaBase._\n") 
 		commentBuffer.append(s"\n")
 
@@ -1092,9 +1093,9 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
     }
 
 		if (ctx.injectLogging) {
-			objBuffer.append(s"object $classname extends ModelBaseObj with LogTrait {\n") 
+			objBuffer.append(s"class ${classname}Factory(modelDef: ModelDef, nodeContext: NodeContext) extends ModelInstanceFactory(modelDef, nodeContext) with LogTrait {\n") 
 		} else {
-			objBuffer.append(s"object $classname extends ModelBaseObj {\n") 
+			objBuffer.append(s"class ${classname}Factory(modelDef: ModelDef, nodeContext: NodeContext) extends ModelInstanceFactory(modelDef, nodeContext) {\n") 
 		}
 		
 		/** generate static variables */
@@ -1105,8 +1106,8 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		}
 
 
-		objBuffer.append(s"    override def ModelName(): String = $modelName\n")
-		objBuffer.append(s"    override def Version(): String = ${'"'}$versionNo${'"'}\n")
+		objBuffer.append(s"    override def getModelName(): String = $modelName\n")
+		objBuffer.append(s"    override def getVersion(): String = ${'"'}$versionNo${'"'}\n")
 
 		val msgs : ArrayBuffer[(String, Boolean, BaseTypeDef, String)] = if (ctx.containersInScope == null || ctx.containersInScope.size == 0) {
 			PmmlError.logError(ctx, "No input message(s) specified for this model. Please specify messages variable with one or more message names as values.")
@@ -1131,15 +1132,15 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		validMsgBuffer.append(s")")
 		val valEvntArrayInstance = validMsgBuffer.toString
 		
-		/** Add the IsValidMessage function  */
+		/** Add the isValidMessage function  */
 		objBuffer.append(s"    $valEvntArrayInstance\n")   
-		objBuffer.append(s"    override def IsValidMessage(msg: MessageContainerBase): Boolean = { \n")
+		objBuffer.append(s"    override def isValidMessage(msg: MessageContainerBase): Boolean = { \n")
 		objBuffer.append(s"        validMessages.filter( m => m == msg.getClass.getName).size > 0\n")
-		objBuffer.append(s"    }\n")  /** end of IsValidMessage fcn  */		
+		objBuffer.append(s"    }\n")  /** end of isValidMessage fcn  */		
 		objBuffer.append(s"\n")
 
-		/** Add the CreateResultObject function  */
-		objBuffer.append(s"    override def CreateResultObject(): ModelResultBase = new MappedModelResults(); \n\n")
+		/** Add the createResultObject function  */
+		objBuffer.append(s"    override def createResultObject(): ModelResultBase = new MappedModelResults(); \n\n")
 
 		/** plan for the day when there are multiple messages present in the constructor */
 		val msgNameContainerInfo : Array[(String, Boolean, BaseTypeDef, String)] = ctx.containersInScope.filter( ctnr => {
@@ -1158,9 +1159,9 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 			val msgTypeStr : String = msgTypedef.typeString
 			val msgInvokeStr : String = s"msg.asInstanceOf[$msgTypeStr]"
 			
-			objBuffer.append(s"    override def CreateNewModel(mdlCtxt: ModelContext): ModelBase =\n")
+			objBuffer.append(s"    override def createModelInstance(): ModelInstance =\n")
 			objBuffer.append(s"    {\n") 
-			objBuffer.append(s"           new $classname(mdlCtxt, this)\n")
+			objBuffer.append(s"           new $classname(this)\n")
 			objBuffer.append(s"    }\n") 	
 			objBuffer.append(s"\n")
 	
@@ -1216,21 +1217,17 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		 * 
 		 * If no alias is given, the default is System_
 		 */
-		clsBuffer.append(s"class $classname(modelContext: ModelContext, factory: ModelBaseObj, $ctorGtxAndMessagesStr, val modelName:String, val modelVersion:String, val tenantId: String, val transId: Long)\n")
+		clsBuffer.append(s"class $classname(factory: ModelInstanceFactory) ")
 		if (ctx.injectLogging) {
-			clsBuffer.append(s"   extends ModelBase(modelContext,factory) with LogTrait {\n") 
+			clsBuffer.append(s" extends ModelInstance(factory) with LogTrait {\n") 
 		} else {
-			clsBuffer.append(s"   extends ModelBase(modelContext,factory) {\n") 
+			clsBuffer.append(s" extends ModelInstance(factory) {\n") 
 		}
 
-		/** Create the alternate ctor used by the CreateNewModel implementation.  Unpack its content and feed the
-		 *  primary constructor as it is now, passing both the ModelContext and Model object along to satisfy the 
-		 *  ModelBase abstract class required parameters  
-		 */
 		val alternateCtor : String = generateAlternateCtor(msgdefTypes.toArray)
 		clsBuffer.append(s"$alternateCtor\n") 
 		
-		clsBuffer.append(s"    val ctx : com.ligadata.pmml.runtime.Context = new com.ligadata.pmml.runtime.Context(transId, gCtx)\n")
+		clsBuffer.append(s"    var ctx : com.ligadata.pmml.runtime.Context = null\n")
 		clsBuffer.append(s"    def GetContext : Context = { ctx }\n")
 
 		clsBuffer.append(s"    var bInitialized : Boolean = false\n")
@@ -1239,12 +1236,6 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		clsBuffer.append(s"    var simpleRules : ArrayBuffer[SimpleRule] = new ArrayBuffer[SimpleRule]\n")
 		
 		clsBuffer.append(s"\n")
-		clsBuffer.append(s"    /** Initialize the data and transformation dictionaries */\n")
-		clsBuffer.append(s"    if (! bInitialized) {\n")
-		clsBuffer.append(s"         initialize\n")
-		clsBuffer.append(s"         bInitialized = true\n")
-		clsBuffer.append(s"    }\n")
-		clsBuffer.append(s"\n")		
 		
 		/** plan for the day when there are multiple messages present in the constructor.  Should multiple messages
 		 *  be supported, the names for them would be msg, msg1, msg2, ..., msgN  */
@@ -1262,15 +1253,22 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 			val msgContainer : (String, Boolean, BaseTypeDef, String) = msgNameContainerInfo.tail.head
 			val (msgName, isPrintedInCtor, msgTypedef, varName) : (String, Boolean, BaseTypeDef, String) = msgContainer
 			
-			clsBuffer.append(s"\n")
-			clsBuffer.append(s"    /***********************************************************************/\n")
-			clsBuffer.append(s"    ctx.dDict.apply(${'"'}gCtx${'"'}).Value(new AnyDataValue(gCtx))\n")
-			clsBuffer.append(s"    ctx.dDict.apply(${'"'}$msgName${'"'}).Value(new AnyDataValue($msgName))\n")
-			clsBuffer.append(s"    /***********************************************************************/\n")
 			/** 
 			 *  Add the initialize function to the the class body 
 			 */
-			clsBuffer.append(s"    def initialize : $classname = {\n")
+			clsBuffer.append(s"    def initialize(tmpMsg: MessageContainerBase, gCtx: EnvContext) : $classname = {\n")
+			clsBuffer.append(s"\n")
+			
+			clsBuffer.append(s"        /** Initialize the data and transformation dictionaries */\n")
+			clsBuffer.append(s"        if (bInitialized)\n")
+			clsBuffer.append(s"            return this\n")
+			clsBuffer.append(s"        bInitialized = true\n")
+			clsBuffer.append(s"\n")		
+			
+			val msgType : String = if (msgdefTypes != null && msgdefTypes.size > 1) msgdefTypes(1) else "Any"
+			
+			clsBuffer.append(s"        val $msgName = tmpMsg.asInstanceOf[${msgType}]\n\n")
+		
 			clsBuffer.append(s"\n")
 			
 			/** Other Model Support FIXME: Note that the simpleRules/ruleset,rulesetmodel references are only appropriate for RuleSetModels */
@@ -1437,6 +1435,11 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 			}
 			clsBuffer.append(s"        ctx.pmmlModelIdentifiers(${'"'}ClassName${'"'}) = Some($clsId)\n")
 			clsBuffer.append(s"\n")
+			clsBuffer.append(s"        /***********************************************************************/\n")
+			clsBuffer.append(s"        ctx.dDict.apply(${'"'}gCtx${'"'}).Value(new AnyDataValue(gCtx))\n")
+			clsBuffer.append(s"        ctx.dDict.apply(${'"'}$msgName${'"'}).Value(new AnyDataValue($msgName))\n")
+			clsBuffer.append(s"        /***********************************************************************/\n")
+			clsBuffer.append(s"\n")
 			clsBuffer.append(s"        this\n")
 			clsBuffer.append(s"    }   /** end of initialize fcn  */	\n")  /** end of initialize fcn  */		
 			clsBuffer.append(s"\n")
@@ -1446,7 +1449,9 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 			 *  Add the execute function to the the class body... the prepareResults function will build the return array for consumption by engine. 
 			 */
 			clsBuffer.append(s"    /** provide access to the ruleset model's execute function */\n")
-			clsBuffer.append(s"    def execute(emitAllResults : Boolean) : ModelResultBase = {\n")
+			clsBuffer.append(s"    def execute(txnCtxt: TransactionContext, emitAllResults : Boolean) : ModelResultBase = {\n")
+			clsBuffer.append(s"        ctx = new com.ligadata.pmml.runtime.Context(txnCtxt.getTransactionId, txnCtxt.getNodeCtxt.getEnvCtxt)\n")
+			clsBuffer.append(s"        initialize(txnCtxt.getMessage, txnCtxt.getNodeCtxt.getEnvCtxt)\n")
 			clsBuffer.append(s"        ctx.GetRuleSetModel.execute(ctx)\n")
 			clsBuffer.append(s"        prepareResults(emitAllResults)\n")
 			clsBuffer.append(s"    }\n")
@@ -1458,7 +1463,7 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
  	}
 
 	/** 
-	 *  Answer the alternate constructor string that the model object's CreateNewModel method uses.
+	 *  Answer the alternate constructor string that the model object's createModelInstance method uses.
 	 *  The alternate constructor is used to integrate the new traits developed with the
 	 *  current model generator.  Using this approach, very little of the compiler has changed to 
 	 *  support it.
@@ -1466,7 +1471,7 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 	 *  @param msgdefTypes : an Array[String] containing the message typedef strings that have been supplied
 	 *  	to the model. While we are currently only supporting one as far as the engine goes, the compiler
 	 *   	supports more than one in the event the multiple input messages become a feature.
-	 *  @return the "def this(val modelContext: ModelContext, val factory: ModelBaseObj){...}" constructor
+	 *  @return the "def this(val factory: ModelInstanceFactory){...}" constructor
 	 *  	string that will be included into the model being generated  
 	 *   
 	 *  Note: Currently there is only one message supported.
@@ -1495,15 +1500,6 @@ object NodePrinterHelpers extends com.ligadata.pmml.compiler.LogTrait {
 		/** the second type in the list is for the first message... the first one being the EnvContext */
 		val msgType : String = if (msgdefTypes != null && msgdefTypes.size > 1) msgdefTypes(1) else "Any"
 		
-		ctorBuffer.append(s"    def this(modelContext: ModelContext, factory: ModelBaseObj) {\n")
-		ctorBuffer.append(s"        this(modelContext, factory\n")
-		ctorBuffer.append(s"            , (if (modelContext != null && modelContext.txnContext != null) modelContext.txnContext.gCtx else null)\n")
-		ctorBuffer.append(s"            , (if (modelContext != null) modelContext.msg.asInstanceOf[$msgType] else null)\n")
-		ctorBuffer.append(s"            , factory.ModelName\n")
-		ctorBuffer.append(s"            , factory.Version\n")
-		ctorBuffer.append(s"            , (if (modelContext != null && modelContext.txnContext != null) modelContext.txnContext.tenantId else null)\n")
-		ctorBuffer.append(s"            , (if (modelContext != null && modelContext.txnContext != null) modelContext.txnContext.transId else 0L))\n")
-		ctorBuffer.append(s"     }\n")		
 		ctorBuffer.toString
 	}
 

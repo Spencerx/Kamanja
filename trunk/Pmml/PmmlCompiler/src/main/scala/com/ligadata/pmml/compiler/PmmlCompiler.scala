@@ -31,7 +31,7 @@ import java.nio.charset.StandardCharsets
 import javax.xml.parsers.SAXParserFactory
 import org.xml.sax.InputSource
 import org.xml.sax.XMLReader
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata.MdMgr._
 import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadataload.MetadataLoad
@@ -228,7 +228,7 @@ import com.ligadata.Exceptions.StackTrace
 
 object PmmlCompilerGlobalLogger {
     val loggerName = this.getClass.getName()
-    val logger = Logger.getLogger(loggerName)
+    val logger = LogManager.getLogger(loggerName)
 }
 
 trait LogTrait {
@@ -530,7 +530,7 @@ class PmmlCompiler(val mgr : MdMgr, val clientName : String, val logger : Logger
 		
 		val modelNamespace = modelPkg
 		
-		val fqClassName : String = modelNamespace + "." + className 
+		val fqClassName : String = modelNamespace + "." + className + "Factory"
 		/** FIXME: This is hard coded now, but should be determined based upon the model type specified in the xml */
 		val modelType : String = "RuleSet" 
 		val inputVars : List[(String,String,String,String,Boolean,String)] = ctx.modelInputs.values.toList

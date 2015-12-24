@@ -25,7 +25,7 @@ import org.apache.shiro.mgt.SecurityManager
 import org.apache.shiro.session.Session
 import org.apache.shiro.subject.Subject
 import org.apache.shiro.util.Factory
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import com.ligadata.SecurityAdapterInfo.SecurityAdapter
 import java.util.Properties
@@ -55,7 +55,7 @@ class SimpleApacheShiroAdapter extends SecurityAdapter{
   override def performAuth(secParams: java.util.Properties): Boolean = {
 
     val loggerName = this.getClass.getName
-    val log = Logger.getLogger(loggerName)
+    val log = LogManager.getLogger(loggerName)
    // log.setLevel(Level.TRACE);
     
     val factory = new IniSecurityManagerFactory("classpath:shiro.ini");

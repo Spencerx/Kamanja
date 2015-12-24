@@ -18,11 +18,11 @@ package com.ligadata.MetadataAPI.Utility
 
 import java.io.File
 
-import com.ligadata.MetadataAPI.MetadataAPIImpl
+import com.ligadata.MetadataAPI.{MetadataAPIImpl,ApiResult,ErrorCodeConstants}
 
 import scala.io.Source
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 /**
  * Created by dhaval on 8/7/15.
@@ -31,7 +31,7 @@ import org.apache.log4j._
 object ModelService {
   private val userid: Option[String] = Some("metadataapi")
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   def addModelPmml(input: String): String = {
     var modelDef=""
@@ -347,14 +347,19 @@ object ModelService {
 
   def getAllModels: String ={
     var response=""
-    val modelKeys = MetadataAPIImpl.GetAllModelsFromCache(true, userid)
-    if (modelKeys.length == 0) {
-      response="Sorry, No models available in the Metadata"
-    }else{
-      var srNo = 0
-      for(modelKey <- modelKeys){
-        srNo += 1
-        response+="[" + srNo + "]" + modelKey+"\n"
+    var modelKeysList=""
+    try{
+      val modelKeys:Array[String] = MetadataAPIImpl.GetAllModelsFromCache(true, userid)
+      if (modelKeys.length == 0) {
+       var emptyAlert="Sorry, No models available in the Metadata"
+        response=(new ApiResult(ErrorCodeConstants.Success, "ModelService",null, emptyAlert)).toString
+      }else{
+        response= (new ApiResult(ErrorCodeConstants.Success, "ModelService", modelKeys.mkString(", "), "Successfully retrieved all the messages")).toString
+      }
+    }catch {
+      case e: Exception => {
+        response = e.getStackTrace.toString
+        response= (new ApiResult(ErrorCodeConstants.Failure, "ModelService",null, response)).toString
       }
     }
     response

@@ -18,7 +18,7 @@ import scala.reflect.runtime.universe
 import scala.collection.mutable.ArrayBuffer
 import java.util.Properties
 import java.sql.{ Connection, Statement, ResultSet, DriverManager }
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import java.io.{ OutputStream, FileOutputStream, File, BufferedWriter, Writer, PrintWriter }
 import java.util.zip.GZIPOutputStream
 import java.nio.file.{ Paths, Files }
@@ -53,7 +53,7 @@ class DriverShim(d: Driver) extends Driver {
 }
 
 object RunJdbcCollector {
-  private val LOG = Logger.getLogger(getClass);
+  private val LOG = LogManager.getLogger(getClass);
   private val clsLoader = new JdbcClassLoader(ClassLoader.getSystemClassLoader().asInstanceOf[URLClassLoader].getURLs(), getClass().getClassLoader())
   // private val clsMirror = ru.runtimeMirror(clsLoader)
   private val loadedJars: TreeSet[String] = new TreeSet[String];

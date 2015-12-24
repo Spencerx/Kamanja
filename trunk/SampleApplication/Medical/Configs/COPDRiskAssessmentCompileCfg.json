@@ -1,0 +1,18 @@
+{
+  "COPDRiskAssessment": {
+    "Dependencies": [
+      "kamanjabase_2.10-1.0.jar"
+    ],
+    "MessageAndContainers": [
+      "com.ligadata.kamanja.samples.messages.beneficiary",
+      "com.ligadata.kamanja.samples.messages.inpatientclaim",
+      "com.ligadata.kamanja.samples.messages.outpatientclaim",
+      "com.ligadata.kamanja.samples.messages.hl7",
+      "com.ligadata.kamanja.samples.containers.coughcodes",
+      "com.ligadata.kamanja.samples.containers.sputumcodes",
+      "com.ligadata.kamanja.samples.containers.envcodes",
+      "com.ligadata.kamanja.samples.containers.dyspnoeacodes",
+      "com.ligadata.kamanja.samples.containers.smokecodes"
+    ]
+  }
+}

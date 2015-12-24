@@ -27,7 +27,7 @@ import com.ligadata.MetadataAPI._
 import com.ligadata.Serialize._
 
 import scala.util.control._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -47,8 +47,7 @@ class GetLeaderService(requestContext: RequestContext, userid:Option[String], pa
   val log = Logging(system, getClass)
   
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
-  logger.setLevel(Level.TRACE);
+  val logger = LogManager.getLogger(loggerName)
 
   val APIName = "GetLeader"
 

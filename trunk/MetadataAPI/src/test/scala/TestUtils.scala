@@ -25,7 +25,7 @@ import scala.util.Random
  * Created by wtarver on 4/23/15.
  */
 object TestUtils {
-  private val logger = org.apache.log4j.Logger.getLogger(this.getClass)
+  private val logger = org.apache.logging.log4j.LogManager.getLogger(this.getClass)
   private val random: Random = new Random()
 
   def constructTempDir(dirPrefix:String):File = {
@@ -52,18 +52,15 @@ object TestUtils {
     }
   }
 
-  @throws(classOf[FileNotFoundException])
-  def deleteFile(path:File):Boolean = {
-    if(!path.exists()){
-      throw new FileNotFoundException(path.getAbsolutePath)
-    }
-    var ret = true
-    if (path.isDirectory){
-      for(f <- path.listFiles) {
-        ret = ret && deleteFile(f)
+  def deleteFile(path:File):Unit = {
+    if(path.exists()){
+      if (path.isDirectory){
+	for(f <- path.listFiles) {
+          deleteFile(f)
+	}
       }
+      logger.debug("AUTOMATION-TESTUTILS: Deleting file '" + path + "'")
+      path.delete()
     }
-    logger.debug("AUTOMATION-TESTUTILS: Deleting file '" + path + "'")
-    return ret && path.delete()
   }
 }

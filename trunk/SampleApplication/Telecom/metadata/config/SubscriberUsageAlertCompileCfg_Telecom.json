@@ -1,6 +1,16 @@
 {
-    "SubscriberUsageAlert":{
-        "Dependencies":["kamanjabase_2.10-1.0.jar"],
-        "MessageAndContainers":["system.subscriberaggregatedusage","system.subscriberinfo","system.subscriberglobalpreferences","system.subscriberplans","system.accountinfo", "system.accountaggregatedusage", "system.subscriberusage"]
+    "SubscriberUsageAlert": {
+        "Dependencies": [
+            "kamanjabase_2.10-1.0.jar"
+        ],
+        "MessageAndContainers": [
+            "com.ligadata.kamanja.samples.containers.subscriberaggregatedusage",
+            "com.ligadata.kamanja.samples.containers.subscriberinfo",
+            "com.ligadata.kamanja.samples.containers.subscriberglobalpreferences",
+            "com.ligadata.kamanja.samples.containers.subscriberplans",
+            "com.ligadata.kamanja.samples.containers.accountinfo",
+            "com.ligadata.kamanja.samples.containers.accountaggregatedusage",
+            "com.ligadata.kamanja.samples.messages.subscriberusage"
+        ]
     }
 }

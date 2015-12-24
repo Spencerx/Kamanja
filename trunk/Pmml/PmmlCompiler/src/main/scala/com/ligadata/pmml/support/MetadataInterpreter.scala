@@ -21,7 +21,7 @@ import scala.collection.immutable.{ Set }
 import scala.math._
 import scala.collection.immutable.StringLike
 import scala.util.control.Breaks._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata._
 import com.ligadata.pmml.compiler._
 import com.ligadata.pmml.syntaxtree.cooked.common._

@@ -1,6 +1,6 @@
 {
    	"Container": { 
-   		"NameSpace":"System",
+   		"NameSpace":"com.ligadata.kamanja.samples.containers",
    		"Name":"SputumCodes",
    		"Version":"00.01.00",
    		"Description":"Container for Chronic Sputum Codes",

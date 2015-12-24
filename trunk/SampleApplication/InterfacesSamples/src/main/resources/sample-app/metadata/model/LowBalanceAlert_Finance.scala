@@ -16,23 +16,23 @@
 
 package com.ligadata.models.samples.models
 
-import com.ligadata.KamanjaBase.{ BaseMsg, BaseContainer, RddUtils, RddDate, BaseContainerObj, MessageContainerBase, RDDObject, RDD }
-import com.ligadata.KamanjaBase.{ TimeRange, ModelBaseObj, ModelBase, ModelResultBase, TransactionContext, ModelContext }
-import System._
+import com.ligadata.KamanjaBase._
+import com.ligadata.KvBase.TimeRange
 import RddUtils._
 import RddDate._
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import java.io.{ DataInputStream, DataOutputStream }
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
+import com.ligadata.kamanja.metadata.ModelDef;
 
-object LowBalanceAlert extends ModelBaseObj {
-  override def IsValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[TransactionMsg]
-  override def CreateNewModel(mdlCtxt: ModelContext): ModelBase = return new LowBalanceAlert(mdlCtxt)
-  override def ModelName(): String = "System.LowBalanceAlert" // Model Name
-  override def Version(): String = "0.0.1" // Model Version
-  override def CreateResultObject(): ModelResultBase = new LowBalanceAlertResult()
+class LowBalanceAlertFactory(modelDef: ModelDef, nodeContext: NodeContext) extends ModelInstanceFactory(modelDef, nodeContext) {
+  override def isValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[TransactionMsg]
+  override def createModelInstance(): ModelInstance = return new LowBalanceAlert(this)
+  override def getModelName(): String = "LowBalanceAlert" // Model Name
+  override def getVersion(): String = "0.0.1" // Model Version
+  override def createResultObject(): ModelResultBase = new LowBalanceAlertResult()
 }
 
 class LowBalanceAlertResult extends ModelResultBase {
@@ -118,9 +118,9 @@ class LowBalanceAlertResult extends ModelResultBase {
   }
 }
 
-class LowBalanceAlert(mdlCtxt: ModelContext) extends ModelBase(mdlCtxt, LowBalanceAlert) {
-  // private[this] val LOG = Logger.getLogger(getClass);
-  override def execute(emitAllResults: Boolean): ModelResultBase = {
+class LowBalanceAlert(factory: ModelInstanceFactory) extends ModelInstance(factory) {
+  // private[this] val LOG = LogManager.getLogger(getClass);
+  override def execute(txnCtxt: TransactionContext, outputDefault: Boolean): ModelResultBase = {
     // First check the preferences and decide whether to continue or not
     val gPref = GlobalPreferences.getRecentOrNew(Array("Type1"))
     val pref = CustPreferences.getRecentOrNew

@@ -36,6 +36,10 @@ mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
     case x if x contains "org/objectweb/asm/" => MergeStrategy.last
     case x if x contains "org/apache/commons/collections" =>  MergeStrategy.last
     case x if x contains "org\\apache\\commons\\collections" =>  MergeStrategy.last
+    case x if x contains "com.fasterxml.jackson.core" => MergeStrategy.first
+    case x if x contains "com/fasterxml/jackson/core" => MergeStrategy.first
+    case x if x contains "com\\fasterxml\\jackson\\core" => MergeStrategy.first
+    case x if x contains "commons-logging" => MergeStrategy.first
     case "log4j.properties" => MergeStrategy.first
     case "unwanted.txt"     => MergeStrategy.discard
     case x => old(x)

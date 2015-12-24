@@ -20,7 +20,7 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.io.{ ByteArrayInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream }
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import java.util.Date
 import java.util.Calendar
 import java.text.SimpleDateFormat
@@ -120,17 +120,20 @@ trait MessageContainerObjBase {
     timePartitionType.toLowerCase match {
       case "yearly" => {
         var newcal: Calendar = Calendar.getInstance();
+        newcal.setTimeInMillis(0)
         newcal.set(Calendar.YEAR, cal.get(Calendar.YEAR));
         return newcal.getTime().getTime()
       }
       case "monthly" => {
         var newcal: Calendar = Calendar.getInstance();
+        newcal.setTimeInMillis(0)
         newcal.set(Calendar.YEAR, cal.get(Calendar.YEAR))
         newcal.set(Calendar.MONTH, cal.get(Calendar.MONTH))
         return newcal.getTime().getTime()
       }
       case "daily" => {
         var newcal: Calendar = Calendar.getInstance();
+        newcal.setTimeInMillis(0)
         newcal.set(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
         return newcal.getTime().getTime()
       }
@@ -146,7 +149,7 @@ trait MdBaseResolveInfo {
 
 object SerializeDeserialize {
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   def Serialize(inst: MessageContainerBase): Array[Byte] = {
     val bos: ByteArrayOutputStream = new ByteArrayOutputStream(1024 * 1024)
     val dos = new DataOutputStream(bos)

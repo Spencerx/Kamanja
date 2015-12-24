@@ -20,7 +20,7 @@ import com.ligadata.kamanja.metadata._
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 class BaseTypesHandler {
 
@@ -31,7 +31,7 @@ class BaseTypesHandler {
   private val newline = "\n"
   val transactionid: String = "transactionid"
   var cnstObjVar = new ConstantMsgObjVarGenerator
-  private val LOG = Logger.getLogger(getClass)
+  private val LOG = LogManager.getLogger(getClass)
 
   def handleBaseTypes(keysSet: Set[String], fixed: String, typ: Option[com.ligadata.kamanja.metadata.BaseTypeDef], f: Element, msgVersion: String, childs: Map[String, Any], prevVerMsgBaseTypesIdxArry: ArrayBuffer[String], recompile: Boolean, mappedTypesABuf: ArrayBuffer[String], firstTimeBaseType: Boolean, msg: Message): (List[(String, String)], List[(String, String, String, String, Boolean, String)], Set[String], ArrayBuffer[String], ArrayBuffer[String], Array[String]) = {
     var scalaclass = new StringBuilder(8 * 1024)

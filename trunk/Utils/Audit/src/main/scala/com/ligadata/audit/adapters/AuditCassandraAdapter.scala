@@ -17,7 +17,7 @@
 package com.ligadata.audit.adapters
 
 import com.ligadata.AuditAdapterInfo._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import java.util.Date
 import java.util.Calendar
 import com.datastax.driver.core.ConsistencyLevel
@@ -43,7 +43,7 @@ import com.ligadata.Exceptions._
 
 class AuditCassandraAdapter extends AuditAdapter {
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   var adapterProperties: scala.collection.mutable.Map[String,String] = scala.collection.mutable.Map[String,String]()
 

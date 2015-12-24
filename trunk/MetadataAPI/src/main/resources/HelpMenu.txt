@@ -60,7 +60,7 @@ X. Cluster, metadata and adapter operations
 kamanja dump metadata
 kamanja dump all nodes
 kamanja dump all clusters
-kamanja kamanja dump all cluster cfgs
+kamanja dump all cluster cfgs
 kamanja dump all adapters
 XII. Kamanja engine operations
 kamanja start

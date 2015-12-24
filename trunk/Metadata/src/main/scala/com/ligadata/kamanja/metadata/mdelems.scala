@@ -85,31 +85,33 @@ object ObjType extends Enumeration {
       case "tList" => "List"
       case "tQueue" => "Queue"
       case "tStruct" => "Struct"
+      case "tAttr" => "Attr"
       case _ => "None"
     }
     str
   }
   def fromString(typeStr: String): Type = {
-    val typ: Type = typeStr match {
-      case "None" => tNone
-      case "Any" => tAny
-      case "Int" => tInt
-      case "Long" => tLong
-      case "Float" => tFloat
-      case "Double" => tDouble
-      case "String" => tString
-      case "Boolean" => tBoolean
-      case "Char" => tChar
-      case "Array" => tArray
-      case "Set" => tSet
-      case "SortedSet" => tSortedSet
-      case "TreeSet" => tTreeSet
-      case "Map" => tMap
-      case "HashMap" => tHashMap
-      case "MsgMap" => tMap
-      case "List" => tList
-      case "Queue" => tQueue
-      case "Struct" => tStruct
+    val typ: Type = typeStr.toLowerCase match {
+      case "none" => tNone
+      case "any" => tAny
+      case "int" => tInt
+      case "long" => tLong
+      case "float" => tFloat
+      case "double" => tDouble
+      case "string" => tString
+      case "boolean" => tBoolean
+      case "char" => tChar
+      case "array" => tArray
+      case "set" => tSet
+      case "sortedset" => tSortedSet
+      case "treeset" => tTreeSet
+      case "map" => tMap
+      case "hashmap" => tHashMap
+      case "msgmap" => tMap
+      case "list" => tList
+      case "queue" => tQueue
+      case "struct" => tStruct
+      case "attr" => tAttr
       case _ => tNone
     }
     typ
@@ -603,6 +605,10 @@ class ArgDef {
   def typeString: String = aType.typeString
 }
 
+class FactoryOfModelInstanceFactoryDef extends BaseElemDef {
+  
+}
+
 class FunctionDef extends BaseElemDef {
   var retType: BaseTypeDef = _ // return type of this function - could be simple scalar or array or complex type such as map or set
   var args: Array[ArgDef] = _ // list of arguments definitions
@@ -794,11 +800,12 @@ class UserPropertiesInfo {
 
 class OutputMsgDef extends BaseElemDef {
   var Queue: String = _
-  var ParitionKeys: Array[(String, Array[(String, String)], String, String)] = _ // Output Partition Key. Message/Model Full Qualified Name as first value in tuple, Rest of the field name as second value in tuple and "Mdl" Or "Msg" String as the third value in tuple.
+  var ParitionKeys: Array[(String, Array[(String, String, String, String)], String, String)] = _ // Output Partition Key. Message/Model Full Qualified Name as first value in tuple, Rest of the field name as second value in tuple (filed name, field type, tType string, tTypeType string) and "Mdl" Or "Msg" String as the third value in tuple.
   var DataDeclaration: Map[String, String] = _
   var Defaults: Map[String, String] = _ // Local Variables. So, we are not expecting qualified names here.
-  var Fields: Map[(String, String), Set[(Array[(String, String)], String)]] = _ // Fields from Message/Model. Map Key is Message/Model Full Qualified Name as first value in key tuple and "Mdl" Or "Msg" String as the second value in key tuple. Value is Set of fields & corresponding Default Value (if not present NULL)
+  var Fields: Map[(String, String), Set[(Array[(String, String, String, String)], String)]] = _ // Fields from Message/Model. Map Key is Message/Model Full Qualified Name as first value in key tuple(filed name, field type, tType string, tTypeType string) and "Mdl" Or "Msg" String as the second value in key tuple. Value is Set of fields & corresponding Default Value (if not present NULL)
   var OutputFormat: String = _ // Format String
+  var FormatSplittedArray: Array[(String, String)] = _ // OutputFormat split to substitute like (constant & substitute variable) tuples 
 }
 
 object ModelCompilationConstants {

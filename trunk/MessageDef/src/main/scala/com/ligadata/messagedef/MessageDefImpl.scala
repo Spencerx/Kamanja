@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.json4s.jackson.JsonMethods._
 import org.json4s.DefaultFormats
 import org.json4s.Formats
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata.MdMgr
 import com.ligadata.kamanja.metadata.EntityType
 import com.ligadata.kamanja.metadata.MessageDef
@@ -69,7 +69,7 @@ object AsString extends ClassCaster[String]
 class MessageDefImpl {
 
   val logger = this.getClass.getName
-  lazy val log = Logger.getLogger(logger)
+  lazy val log = LogManager.getLogger(logger)
   //val pkg: String = "com.ligadata.messagescontainers"
   var rddHandler = new RDDHandler
   var methodGen = new ConstantMethodGenerator
@@ -365,12 +365,12 @@ class MessageDefImpl {
       val isFixed = cnstObjVar.getIsFixed(message)
       val (versionPkgImport, nonVerPkgImport, verPkg, nonVerPkg) = cnstObjVar.importStmts(message)
       scalaclass = scalaclass.append(versionPkgImport.toString() + newline + newline + objstr + newline + cobj.toString + newline + clsstr.toString + newline)
-      scalaclass = scalaclass.append(classstr + cnstObjVar.logStackTrace + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getFixedMsgNativeKeyValueData(nativeKeyValues) + methodGen.populate + methodGen.populatecsv(csvassignstr, count) + methodGen.populateJson + methodGen.assignJsonData(jsonstr) + methodGen.assignXmlData(xmlStr) + populateKvData + getSerializedFuncStr + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfFixed + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}")
+      scalaclass = scalaclass.append(classstr + cnstObjVar.logStackTrace + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getFixedMsgNativeKeyValueData(nativeKeyValues) + methodGen.populate + methodGen.populatecsv(csvassignstr, count) + methodGen.populateJson + methodGen.assignJsonData(jsonstr) + methodGen.assignXmlData(xmlStr) + populateKvData + getSerializedFuncStr + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfFixed + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.getTimePartition(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}")
 
       verJavaFactory = verJavaFactory.append(verPkg + rddHandler.javaMessageFactory(message) + " \n")
 
       nonVerScalaCls = nonVerScalaCls.append(nonVerPkgImport.toString() + newline + newline + objstr + newline + cobj.toString + newline + clsstr.toString + newline)
-      nonVerScalaCls = nonVerScalaCls.append(classstr + cnstObjVar.logStackTrace + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getFixedMsgNativeKeyValueData(nativeKeyValues) + methodGen.populate + methodGen.populatecsv(csvassignstr, count) + methodGen.populateJson + methodGen.assignJsonData(jsonstr) + methodGen.assignXmlData(xmlStr) + populateKvData + getSerializedFuncStr + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfFixed + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}")
+      nonVerScalaCls = nonVerScalaCls.append(classstr + cnstObjVar.logStackTrace + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getFixedMsgNativeKeyValueData(nativeKeyValues) + methodGen.populate + methodGen.populatecsv(csvassignstr, count) + methodGen.populateJson + methodGen.assignJsonData(jsonstr) + methodGen.assignXmlData(xmlStr) + populateKvData + getSerializedFuncStr + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfFixed + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.getTimePartition(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}")
 
       nonverJavaFactory = nonverJavaFactory.append(nonVerPkg + rddHandler.javaMessageFactory(message) + " \n")
     } catch {
@@ -446,12 +446,12 @@ class MessageDefImpl {
       val (versionPkgImport, nonVerPkgImport, verPkg, nonVerPkg) = cnstObjVar.importStmts(message)
 
       scalaclass = scalaclass.append(versionPkgImport.toString() + newline + newline + objstr + newline + cobj.toString + newline + clsstr.toString + newline)
-      scalaclass = scalaclass.append(classstr + cnstObjVar.logStackTrace + cnstObjVar.getTransactionIdMapped + cnstObjVar.getCollectionsMapped(collections) + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getMappedMsgNativeKeyValueData() + methodGen.populate + methodGen.populateMappedCSV(csvassignstr, count) + methodGen.populateJson + methodGen.assignMappedJsonData(jsonstr) + methodGen.assignMappedXmlData(xmlStr) + methodGen.MappedMsgSerialize + methodGen.populateMappedMsgKvData(assignKvData) + methodGen.MappedMsgSerializeBaseTypes(mappedSerBaseTypesBuf) + methodGen.MappedMsgSerializeArrays(serializedBuf) + "" + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfMapped + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}") //cnstObjVar.fromFuncOfMappedMsg(message) 
+      scalaclass = scalaclass.append(classstr + cnstObjVar.logStackTrace + cnstObjVar.getTransactionIdMapped + cnstObjVar.getCollectionsMapped(collections) + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getMappedMsgNativeKeyValueData() + methodGen.populate + methodGen.populateMappedCSV(csvassignstr, count) + methodGen.populateJson + methodGen.assignMappedJsonData(jsonstr) + methodGen.assignMappedXmlData(xmlStr) + methodGen.MappedMsgSerialize + methodGen.populateMappedMsgKvData(assignKvData) + methodGen.MappedMsgSerializeBaseTypes(mappedSerBaseTypesBuf) + methodGen.MappedMsgSerializeArrays(serializedBuf) + "" + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfMapped + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.getTimePartition(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}") //cnstObjVar.fromFuncOfMappedMsg(message) 
 
       verJavaFactory = verJavaFactory.append(verPkg + rddHandler.javaMessageFactory(message) + " \n")
 
       nonVerScalaCls = nonVerScalaCls.append(nonVerPkgImport.toString() + newline + newline + objstr + newline + cobj.toString + newline + clsstr.toString + newline)
-      nonVerScalaCls = nonVerScalaCls.append(classstr + cnstObjVar.logStackTrace + cnstObjVar.getTransactionIdMapped + cnstObjVar.getCollectionsMapped(collections) + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getMappedMsgNativeKeyValueData() + methodGen.populate + methodGen.populateMappedCSV(csvassignstr, count) + methodGen.populateJson + methodGen.assignMappedJsonData(jsonstr) + methodGen.assignMappedXmlData(xmlStr) + methodGen.populateMappedMsgKvData(assignKvData) + methodGen.MappedMsgSerialize + methodGen.MappedMsgSerializeBaseTypes(mappedSerBaseTypesBuf) + methodGen.MappedMsgSerializeArrays(serializedBuf) + "" + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfMapped + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}") //cnstObjVar.fromFuncOfMappedMsg(message)
+      nonVerScalaCls = nonVerScalaCls.append(classstr + cnstObjVar.logStackTrace + cnstObjVar.getTransactionIdMapped + cnstObjVar.getCollectionsMapped(collections) + csetters + addMsgStr + getMsgStr + cnstObjVar.saveObject(message) + methodGen.getNativeKeyMapVar(nativeKeyMapStr) + methodGen.getMappedMsgNativeKeyValueData() + methodGen.populate + methodGen.populateMappedCSV(csvassignstr, count) + methodGen.populateJson + methodGen.assignMappedJsonData(jsonstr) + methodGen.assignMappedXmlData(xmlStr) + methodGen.populateMappedMsgKvData(assignKvData) + methodGen.MappedMsgSerialize + methodGen.MappedMsgSerializeBaseTypes(mappedSerBaseTypesBuf) + methodGen.MappedMsgSerializeArrays(serializedBuf) + "" + getDeserializedFuncStr + convertOldObjtoNewObj + withMethods + fromFuncOfMapped + cnstObjVar.computeTimePartitionDate(message) + cnstObjVar.getTimePartition(message) + cnstObjVar.transactionIdFuncs(message) + hasPrimaryPartitionTimePartitionKeys + " \n}") //cnstObjVar.fromFuncOfMappedMsg(message)
 
       nonverJavaFactory = nonverJavaFactory.append(nonVerPkg + rddHandler.javaMessageFactory(message) + " \n")
 
@@ -873,7 +873,7 @@ class MessageDefImpl {
         } else throw new Exception("Time Partition Key should be defined in the message definition");
 
         if (timePartitionMap.contains("Format") && (timePartitionMap.get("Format").get.isInstanceOf[String])) {
-          timePartitionKeyFormat = timePartitionMap.get("Format").get.asInstanceOf[String].toLowerCase()
+          timePartitionKeyFormat = timePartitionMap.get("Format").get.asInstanceOf[String] //.toLowerCase()
 
           if (!validateTimePartitionFormat(timePartitionKeyFormat))
             throw new Exception("Time Parition format given in message definition " + timePartitionKeyFormat + " is not a valid format");

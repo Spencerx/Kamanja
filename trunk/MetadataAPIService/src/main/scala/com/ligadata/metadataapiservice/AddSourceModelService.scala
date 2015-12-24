@@ -30,7 +30,7 @@ import scala.util.{ Success, Failure }
 import com.ligadata.MetadataAPI._
 
 import scala.util.control._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object AddSourceModelService {
   case class ProcessJava(sourceCode:String)
@@ -47,7 +47,7 @@ class AddSourceModelService(requestContext: RequestContext, userid:Option[String
   val APIName = "AddSourceModelService"
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   //logger.setLevel(Level.TRACE);
 
   def receive = {

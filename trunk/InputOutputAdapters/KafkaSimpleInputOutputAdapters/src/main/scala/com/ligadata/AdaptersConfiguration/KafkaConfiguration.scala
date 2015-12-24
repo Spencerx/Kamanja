@@ -26,6 +26,14 @@ class KafkaQueueAdapterConfiguration extends AdapterConfiguration {
   var topic: String = _ // topic name
   var noDataSleepTimeInMs: Int = 300 // No Data Sleep Time in milli secs. Default is 300 ms
   var instancePartitions: Set[Int] = _ // Valid only for Input Queues. These are the partitions we handle for this Queue. For now we are treating Partitions as Ints. (Kafka handle it as ints)
+  var otherconfigs = scala.collection.mutable.Map[String, String]() // Making the key is lowercase always
+}
+
+object KafkaConstants {
+  val KAFKA_SEND_SUCCESS = 0
+  val KAFKA_SEND_Q_FULL = 1
+  val KAFKA_SEND_DEAD_PRODUCER = 2
+  val KAFKA_NOT_SEND = 3
 }
 
 object KafkaQueueAdapterConfiguration {
@@ -62,6 +70,8 @@ object KafkaQueueAdapterConfiguration {
         qc.noDataSleepTimeInMs = kv._2.trim.toInt
         if (qc.noDataSleepTimeInMs < 0)
           qc.noDataSleepTimeInMs = 0
+      } else {
+        qc.otherconfigs(kv._1.toLowerCase()) = kv._2;
       }
     })
 

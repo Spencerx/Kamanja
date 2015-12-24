@@ -17,13 +17,11 @@
 package scala.com.ligadata.MetadataAPI
 
 import java.io.File
-import java.util.logging.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 import com.ligadata.MetadataAPI.{TestMetadataAPI, MetadataAPIImpl}
 import com.ligadata.MetadataAPI.Utility._
 import scala.io.Source
-
-
 
 /**
  * Created by dhaval Kolapkar on 7/24/15.
@@ -35,7 +33,7 @@ object StartMetadataAPI {
   //get default config
   val defaultConfig = sys.env("KAMANJA_HOME") + "/config/MetadataAPIConfig.properties"
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   var action = ""
   var location = ""
   var config = ""
@@ -46,6 +44,9 @@ object StartMetadataAPI {
   val OUTPUT="output"
   val DEACTIVATE="deactivate"
   val UPDATE="update"
+  val MODELS="models"
+  val MESSAGES="messages"
+  val CONTAINERS="containers"
   var expectDep = false
   var expectRemoveParm = false
   var depName: String = ""
@@ -55,7 +56,7 @@ object StartMetadataAPI {
     try {
       var argsUntilParm = 2
       args.foreach(arg =>
-        if(arg.equalsIgnoreCase(OUTPUT) || (arg.equalsIgnoreCase(UPDATE))){
+        if(arg.equalsIgnoreCase(OUTPUT) || arg.equalsIgnoreCase(UPDATE) || arg.equalsIgnoreCase(MODELS) || arg.equalsIgnoreCase(MESSAGES) || arg.equalsIgnoreCase(CONTAINERS)){
           argsUntilParm=3
         }
       )

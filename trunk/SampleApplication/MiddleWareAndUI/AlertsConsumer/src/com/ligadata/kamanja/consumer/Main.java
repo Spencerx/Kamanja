@@ -23,7 +23,7 @@ import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.shared.SharedValue;
 import org.apache.curator.framework.recipes.shared.SharedValueListener;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.{ Logger, LogManager };
 
 import com.ligadata.kamanja.consumer.listener.StartListener;
 import com.ligadata.kamanja.consumer.message.AbstractConsumerController;
@@ -38,7 +38,7 @@ import com.ligadata.kamanja.consumer.util.ZKUtil;
 public class Main {
 
 	private static CuratorFramework zkClient;
-	private static Logger logger = Logger.getLogger(Main.class);
+	private static Logger logger = LogManager.getLogger(Main.class);
 	public static XMLConfiguration config;
 	private static boolean isRun = true;
 	private static AbstractConsumerController alertsController,

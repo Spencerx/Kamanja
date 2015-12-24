@@ -20,7 +20,7 @@ import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadata.ObjType._
 import com.ligadata.kamanja.metadata.MdMgr._
 import scala.collection.mutable.{ ArrayBuffer }
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -75,11 +75,7 @@ case class MetadataApiArgList(ArgList: List[MetadataApiArg])
 object JsonSerializer {
 
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
-
-  def SetLoggerLevel(level: Level) {
-    logger.setLevel(level);
-  }
+  lazy val logger = LogManager.getLogger(loggerName)
 
   @throws(classOf[Json4sParsingException])
   @throws(classOf[FunctionListParsingException])

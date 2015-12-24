@@ -22,7 +22,7 @@ import org.xml.sax.Attributes
 import com.ligadata.kamanja.metadata._
 import com.ligadata.pmml.runtime._
 import com.ligadata.KamanjaBase._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata._
 import scala.util.control.Breaks._
 import com.ligadata.pmml.support._

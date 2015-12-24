@@ -17,7 +17,7 @@
 package com.ligadata.kamanja.metadataload
 
 import scala.collection.mutable.{ Set }
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata.MdMgr._
 import com.ligadata.kamanja.metadata.ObjType._
 import com.ligadata.kamanja.metadata._
@@ -36,7 +36,7 @@ import org.joda.time.Years
 
 trait LogTrait {
     val loggerName = this.getClass.getName()
-    val logger = Logger.getLogger(loggerName)
+    val logger = LogManager.getLogger(loggerName)
 }
 
 /** 
@@ -87,7 +87,13 @@ class MetadataLoad (val mgr : MdMgr, val typesPath : String, val fcnPath : Strin
 			
 		logger.debug("MetadataLoad...loading function macro definitions")
 		initMacroDefs
-	    
+
+		logger.debug("MetadataLoad...loading FactoryOfModelInstanceFactories definitions")
+		initFactoryOfModelInstanceFactories
+	}
+	
+	private def initFactoryOfModelInstanceFactories: Unit = {
+		mgr.AddFactoryOfModelInstanceFactory("com.ligadata.FactoryOfModelInstanceFactory", "JarFactoryOfModelInstanceFactory", "com.ligadata.FactoryOfModelInstanceFactory.JarFactoryOfModelInstanceFactory$", baseTypesVer, "jarfactoryofmodelinstancefactory_2.10-1.0.jar", Array("metadata_2.10-1.0.jar", "exceptions_2.10-1.0.jar", "kamanjabase_2.10-1.0.jar", "log4j-core-2.4.1.jar", "log4j-api-2.4.1.jar"))
 	}
 	
 	// CMS messages + the dimensional data (treated as Containers)

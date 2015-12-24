@@ -1,6 +1,6 @@
 {
   "Container": {
-	"NameSpace": "System",
+	"NameSpace": "com.ligadata.kamanja.samples.containers",
 	"Name": "CustAlertHistory",
 	"Version": "00.01.00",
 	"Description": "Customer Alert History",

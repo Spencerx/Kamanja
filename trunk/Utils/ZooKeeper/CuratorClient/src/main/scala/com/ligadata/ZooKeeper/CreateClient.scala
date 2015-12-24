@@ -23,11 +23,11 @@ import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.CreateMode
 import scala.collection.mutable.ArrayBuffer
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object CreateClient {
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   def CreateNodeIfNotExists(zkcConnectString: String, znodePath: String) = {
     var zkc: CuratorFramework = null
     try {
@@ -54,7 +54,7 @@ object CreateClient {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("StackTrace:"+stackTrace)
+        logger.debug("StackTrace:" + stackTrace)
         throw new Exception("Failed to start a zookeeper session with(" + zkcConnectString + "): " + e.getMessage())
       }
     } finally {
@@ -74,7 +74,20 @@ object CreateClient {
     // The only required arguments are the connection string and the retry policy
     val curatorZookeeperClient = CuratorFrameworkFactory.newClient(connectionString, sessionTimeoutMs, connectionTimeoutMs, retryPolicy);
     curatorZookeeperClient.start
-    curatorZookeeperClient.getZookeeperClient.blockUntilConnectedOrTimedOut
+    var retry = true
+    while (retry) {
+      retry = false
+      try {
+        curatorZookeeperClient.getZookeeperClient.blockUntilConnectedOrTimedOut
+      } catch {
+        case e: java.lang.InterruptedException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.warn("Got InterruptedException. Going to retry after 50ms. StackTrace:" + stackTrace)
+          Thread.sleep(50)
+          retry = true
+        }
+      }
+    }
     curatorZookeeperClient
   }
 
@@ -88,14 +101,27 @@ object CreateClient {
     // The only required arguments are the connection string and the retry policy
     val curatorZookeeperClient = CuratorFrameworkFactory.newClient(connectionString, retryPolicy);
     curatorZookeeperClient.start
-    curatorZookeeperClient.getZookeeperClient.blockUntilConnectedOrTimedOut
+    var retry = true
+    while (retry) {
+      retry = false
+      try {
+        curatorZookeeperClient.getZookeeperClient.blockUntilConnectedOrTimedOut
+      } catch {
+        case e: java.lang.InterruptedException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.warn("Got InterruptedException. Going to retry after 50ms. StackTrace:" + stackTrace)
+          Thread.sleep(50)
+          retry = true
+        }
+      }
+    }
     curatorZookeeperClient
   }
 
   def createWithOptions(connectionString: String,
-    retryPolicy: RetryPolicy,
-    connectionTimeoutMs: Int,
-    sessionTimeoutMs: Int): CuratorFramework = {
+                        retryPolicy: RetryPolicy,
+                        connectionTimeoutMs: Int,
+                        sessionTimeoutMs: Int): CuratorFramework = {
     // using the CuratorFrameworkFactory.builder() gives fine grained control
     // over creation options. See the CuratorFrameworkFactory.Builder javadoc
     // details

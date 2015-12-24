@@ -21,14 +21,14 @@ import java.io.File
 import com.ligadata.MetadataAPI.MetadataAPIImpl
 
 import scala.io.Source
-import org.apache.log4j._
+import org.apache.logging.log4j._
 /**
  * Created by dhaval on 8/12/15.
  */
 object FunctionService {
   private val userid: Option[String] = Some("metadataapi")
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   def addFunction(input: String): String ={
     var response = ""

@@ -24,9 +24,9 @@ import com.ligadata.kamanja.metadata.MdMgr._
 import com.ligadata.kamanja.metadataload.MetadataLoad
 import scala.collection.mutable.TreeSet
 import scala.util.control.Breaks._
-import com.ligadata.KamanjaBase.{ BaseMsg, MdlInfo, MessageContainerBase, MessageContainerObjBase, BaseMsgObj, BaseContainerObj, BaseContainer, ModelBaseObj, TransformMessage, EnvContext, MdBaseResolveInfo }
+import com.ligadata.KamanjaBase.{ BaseMsg, MessageContainerBase, MessageContainerObjBase, BaseMsgObj, BaseContainerObj, BaseContainer, ModelInstanceFactory, TransformMessage, EnvContext, MdBaseResolveInfo, FactoryOfModelInstanceFactory, NodeContext, TransactionContext }
 import scala.collection.mutable.HashMap
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import scala.collection.mutable.ArrayBuffer
 import com.ligadata.Serialize._
 import com.ligadata.ZooKeeper._
@@ -35,6 +35,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.ligadata.Utils.{ Utils, KamanjaClassLoader, KamanjaLoaderInfo }
 import com.ligadata.Exceptions.StackTrace
 import com.ligadata.KamanjaBase.{ EnvContext, ContainerNameAndDatastoreInfo }
+import scala.actors.threadpool.{ ExecutorService, Executors }
+import com.ligadata.KamanjaBase.ThreadLocalStorage
+
+class MdlInfo(val mdl: ModelInstanceFactory, val jarPath: String, val dependencyJarNames: Array[String]) {
+}
 
 class TransformMsgFldsMap(var keyflds: Array[Int], var outputFlds: Array[Int]) {
 }
@@ -47,55 +52,24 @@ class MsgContainerObjAndTransformInfo(var tranformMsgFlds: TransformMsgFldsMap, 
 
 // This is shared by multiple threads to read (because we are not locking). We create this only once at this moment while starting the manager
 class KamanjaMetadata {
-  val LOG = Logger.getLogger(getClass);
+  val LOG = LogManager.getLogger(getClass);
 
   // LOG.setLevel(Level.TRACE)
 
   // Metadata manager
   val messageObjects = new HashMap[String, MsgContainerObjAndTransformInfo]
   val containerObjects = new HashMap[String, MsgContainerObjAndTransformInfo]
-  val modelObjects = new HashMap[String, MdlInfo]
-
-  def ValidateAllRequiredJars(tmpMsgDefs: Option[scala.collection.immutable.Set[MessageDef]], tmpContainerDefs: Option[scala.collection.immutable.Set[ContainerDef]],
-    tmpModelDefs: Option[scala.collection.immutable.Set[ModelDef]]): Boolean = {
-    val allJarsToBeValidated = scala.collection.mutable.Set[String]();
-
-    if (tmpMsgDefs != None) { // Not found any messages
-      tmpMsgDefs.get.foreach(elem => {
-        allJarsToBeValidated ++= GetAllJarsFromElem(elem)
-      })
-    }
-
-    if (tmpContainerDefs != None) { // Not found any messages
-      tmpContainerDefs.get.foreach(elem => {
-        allJarsToBeValidated ++= GetAllJarsFromElem(elem)
-      })
-    }
-
-    if (tmpModelDefs != None) { // Not found any messages
-      tmpModelDefs.get.foreach(elem => {
-        allJarsToBeValidated ++= GetAllJarsFromElem(elem)
-      })
-    }
-
-    val nonExistsJars = Utils.CheckForNonExistanceJars(allJarsToBeValidated.toSet)
-    if (nonExistsJars.size > 0) {
-      LOG.error("Not found jars in Messages/Containers/Models Jars List : {" + nonExistsJars.mkString(", ") + "}")
-      return false
-    }
-
-    true
-  }
+  val modelObjsMap = new HashMap[String, MdlInfo]
 
   def LoadMdMgrElems(tmpMsgDefs: Option[scala.collection.immutable.Set[MessageDef]], tmpContainerDefs: Option[scala.collection.immutable.Set[ContainerDef]],
-    tmpModelDefs: Option[scala.collection.immutable.Set[ModelDef]]): Unit = {
+                     tmpModelDefs: Option[scala.collection.immutable.Set[ModelDef]]): Unit = {
     PrepareMessages(tmpMsgDefs)
     PrepareContainers(tmpContainerDefs)
-    PrepareModels(tmpModelDefs)
+    PrepareModelsFactories(tmpModelDefs)
 
-    LOG.info("Loaded Metadata Messages:" + messageObjects.map(container => container._1).mkString(","))
+    LOG.info("Loaded Metadata Messages:" + messageObjects.map(msg => msg._1).mkString(","))
     LOG.info("Loaded Metadata Containers:" + containerObjects.map(container => container._1).mkString(","))
-    LOG.info("Loaded Metadata Models:" + modelObjects.map(container => container._1).mkString(","))
+    LOG.info("Loaded Metadata Models:" + modelObjsMap.map(mdl => mdl._1).mkString(","))
   }
 
   private[this] def CheckAndPrepMessage(clsName: String, msg: MessageDef): Boolean = {
@@ -117,7 +91,7 @@ class KamanjaMetadata {
       }
     } catch {
       case e: Exception => {
-        LOG.error("Failed to get classname :" + clsName)
+        LOG.debug("Failed to get message classname :" + clsName)
         return false
       }
     }
@@ -169,12 +143,12 @@ class KamanjaMetadata {
           LOG.info("Created Message:" + msgName)
           return true
         } else {
-          LOG.error("Failed to instantiate message object :" + clsName)
+          LOG.debug("Failed to instantiate message object :" + clsName)
           return false
         }
       } catch {
         case e: Exception => {
-          LOG.error("Failed to instantiate message object:" + clsName + ". Reason:" + e.getCause + ". Message:" + e.getMessage())
+          LOG.debug("Failed to instantiate message object:" + clsName + ". Reason:" + e.getCause + ". Message:" + e.getMessage())
           return false
         }
       }
@@ -184,7 +158,7 @@ class KamanjaMetadata {
 
   def PrepareMessage(msg: MessageDef, loadJars: Boolean): Unit = {
     if (loadJars)
-      LoadJarIfNeeded(msg)
+      KamanjaMetadata.LoadJarIfNeeded(msg)
     // else Assuming we are already loaded all the required jars
 
     var clsName = msg.PhysicalName.trim
@@ -199,7 +173,7 @@ class KamanjaMetadata {
       }
     }
     if (foundFlg == false) {
-      LOG.error("Failed to instantiate message object: " + orgClsName)
+      LOG.error("Failed to instantiate message object:%s, class name:%s".format(msg.FullName, orgClsName))
     }
   }
 
@@ -222,7 +196,7 @@ class KamanjaMetadata {
       }
     } catch {
       case e: Exception => {
-        LOG.error("Failed to get classname: " + clsName)
+        LOG.debug("Failed to get container classname: " + clsName)
         return false
       }
     }
@@ -254,12 +228,12 @@ class KamanjaMetadata {
           LOG.info("Created Container:" + contName)
           return true
         } else {
-          LOG.error("Failed to instantiate container object :" + clsName)
+          LOG.debug("Failed to instantiate container object :" + clsName)
           return false
         }
       } catch {
         case e: Exception => {
-          LOG.error("Failed to instantiate containerObjects object:" + clsName + ". Reason:" + e.getCause + ". Message:" + e.getMessage())
+          LOG.debug("Failed to instantiate containerObjects object:" + clsName + ". Reason:" + e.getCause + ". Message:" + e.getMessage())
           return false
         }
       }
@@ -269,7 +243,7 @@ class KamanjaMetadata {
 
   def PrepareContainer(container: ContainerDef, loadJars: Boolean, ignoreClassLoad: Boolean): Unit = {
     if (loadJars)
-      LoadJarIfNeeded(container)
+      KamanjaMetadata.LoadJarIfNeeded(container)
     // else Assuming we are already loaded all the required jars
 
     if (ignoreClassLoad) {
@@ -292,121 +266,42 @@ class KamanjaMetadata {
       }
     }
     if (foundFlg == false) {
-      LOG.error("Failed to instantiate container object :" + orgClsName)
+      LOG.error("Failed to instantiate container object:%s, class name:%s".format(container.FullName, orgClsName))
     }
   }
 
-  private[this] def CheckAndPrepModel(clsName: String, mdl: ModelDef): Boolean = {
-    var isModel = true
-    var curClass: Class[_] = null
+  private def GetFactoryOfMdlInstanceFactory(fqName: String): FactoryOfModelInstanceFactory = {
+    val factObjs = KamanjaMetadata.AllFactoryOfMdlInstFactoriesObjects
+    factObjs.getOrElse(fqName.toLowerCase(), null)
+  }
 
-    try {
-      // If required we need to enable this test
-      // Convert class name into a class
-      var curClz = Class.forName(clsName, true, KamanjaConfiguration.metadataLoader.loader)
-      curClass = curClz
-
-      isModel = false
-
-      while (curClz != null && isModel == false) {
-        isModel = Utils.isDerivedFrom(curClz, "com.ligadata.KamanjaBase.ModelBaseObj")
-        if (isModel == false)
-          curClz = curClz.getSuperclass()
-      }
-    } catch {
-      case e: Exception => {
-        LOG.error("Failed to get classname :" + clsName)
-        return false
-      }
-    }
-
-    // LOG.debug("Loading Model:" + mdl.FullName + ". ClassName: " + clsName + ". IsModel:" + isModel)
-
-    if (isModel) {
-      try {
-        var objinst: Any = null
+  def PrepareModelFactory(mdl: ModelDef, loadJars: Boolean, txnCtxt: TransactionContext): Unit = {
+    if (mdl != null) {
+      if (loadJars)
+        KamanjaMetadata.LoadJarIfNeeded(mdl)
+      // else Assuming we are already loaded all the required jars
+      val factoryOfMdlInstFactoryFqName = "com.ligadata.FactoryOfModelInstanceFactory.JarFactoryOfModelInstanceFactory" //BUGBUG:: We need to get the name from Model Def.
+      val factoryOfMdlInstFactory: FactoryOfModelInstanceFactory = GetFactoryOfMdlInstanceFactory(factoryOfMdlInstFactoryFqName)
+      if (factoryOfMdlInstFactory == null) {
+        LOG.error("FactoryOfModelInstanceFactory %s not found in metadata. Unable to create ModelInstanceFactory for %s".format(factoryOfMdlInstFactoryFqName, mdl.FullName))
+      } else {
         try {
-          // Trying Singleton Object
-          val module = KamanjaConfiguration.metadataLoader.mirror.staticModule(clsName)
-          val obj = KamanjaConfiguration.metadataLoader.mirror.reflectModule(module)
-          // curClz.newInstance
-          objinst = obj.instance
+          val factory: ModelInstanceFactory = factoryOfMdlInstFactory.getModelInstanceFactory(mdl, KamanjaMetadata.gNodeContext, KamanjaConfiguration.metadataLoader, KamanjaConfiguration.jarPaths)
+          if (factory != null) {
+            if (txnCtxt != null) // We are expecting txnCtxt is null only for first time initialization
+              factory.init(txnCtxt)
+            val mdlName = (mdl.NameSpace.trim + "." + mdl.Name.trim).toLowerCase
+            modelObjsMap(mdlName) = new MdlInfo(factory, mdl.jarName, mdl.dependencyJarNames)
+          } else {
+            LOG.debug("Failed to get ModelInstanceFactory for " + mdl.FullName)
+          }
         } catch {
           case e: Exception => {
             val stackTrace = StackTrace.ThrowableTraceString(e)
-            LOG.debug("StackTrace:" + stackTrace)
-            // Trying Regular Object instantiation
-            objinst = curClass.newInstance
+            LOG.debug("Failed to get/initialize ModelInstanceFactory for %s. Reason:%s, Cause:%s\nStackTrace:%s".format(mdl.FullName, e.getMessage, e.getCause, stackTrace))
           }
         }
-
-        // val objinst = obj.instance
-        if (objinst.isInstanceOf[ModelBaseObj]) {
-          val modelobj = objinst.asInstanceOf[ModelBaseObj]
-          val mdlName = (mdl.NameSpace.trim + "." + mdl.Name.trim).toLowerCase
-          modelObjects(mdlName) = new MdlInfo(modelobj, mdl.jarName, mdl.dependencyJarNames, "Ligadata")
-          LOG.info("Created Model:" + mdlName)
-          return true
-        } else {
-          LOG.error("Failed to instantiate model object :" + clsName)
-          LOG.debug("Failed to instantiate model object :" + clsName + ". ObjType0:" + objinst.getClass.getSimpleName + ". ObjType1:" + objinst.getClass.getCanonicalName)
-          return false
-        }
-      } catch {
-        case e: Exception =>
-
-          LOG.error("Failed to instantiate model object:" + clsName + ". Reason:" + e.getCause + ". Message:" + e.getMessage)
-          return false
       }
-    }
-    return false
-  }
-
-  def PrepareModel(mdl: ModelDef, loadJars: Boolean): Unit = {
-    if (loadJars)
-      LoadJarIfNeeded(mdl)
-    // else Assuming we are already loaded all the required jars
-
-    var clsName = mdl.PhysicalName.trim
-    var orgClsName = clsName
-
-    var foundFlg = CheckAndPrepModel(clsName, mdl)
-
-    if (foundFlg == false) {
-      if (clsName.size > 0 && clsName.charAt(clsName.size - 1) != '$') { // if no $ at the end we are taking $
-        clsName = clsName + "$"
-        foundFlg = CheckAndPrepModel(clsName, mdl)
-      }
-    }
-    if (foundFlg == false) {
-      LOG.error("Failed to instantiate model object :" + orgClsName)
-    }
-  }
-
-  def GetAllJarsFromElem(elem: BaseElem): Set[String] = {
-    var allJars: Array[String] = null
-
-    val jarname = if (elem.JarName == null) "" else elem.JarName.trim
-
-    if (elem.DependencyJarNames != null && elem.DependencyJarNames.size > 0 && jarname.size > 0) {
-      allJars = elem.DependencyJarNames :+ jarname
-    } else if (elem.DependencyJarNames != null && elem.DependencyJarNames.size > 0) {
-      allJars = elem.DependencyJarNames
-    } else if (jarname.size > 0) {
-      allJars = Array(jarname)
-    } else {
-      return Set[String]()
-    }
-
-    return allJars.map(j => Utils.GetValidJarFile(KamanjaConfiguration.jarPaths, j)).toSet
-  }
-
-  private def LoadJarIfNeeded(elem: BaseElem): Boolean = {
-    val allJars = GetAllJarsFromElem(elem)
-    if (allJars.size > 0) {
-      return Utils.LoadJars(allJars.toArray, KamanjaConfiguration.metadataLoader.loadedJars, KamanjaConfiguration.metadataLoader.loader)
-    } else {
-      return true
     }
   }
 
@@ -442,7 +337,7 @@ class KamanjaMetadata {
     // Load all jars first
     msgDefs.foreach(msg => {
       // LOG.debug("Loading msg:" + msg.FullName)
-      LoadJarIfNeeded(msg)
+      KamanjaMetadata.LoadJarIfNeeded(msg)
     })
 
     msgDefs.foreach(msg => {
@@ -458,7 +353,7 @@ class KamanjaMetadata {
 
     // Load all jars first
     containerDefs.foreach(container => {
-      LoadJarIfNeeded(container)
+      KamanjaMetadata.LoadJarIfNeeded(container)
     })
 
     val baseContainersPhyName = scala.collection.mutable.Set[String]()
@@ -473,7 +368,7 @@ class KamanjaMetadata {
 
   }
 
-  private def PrepareModels(tmpModelDefs: Option[scala.collection.immutable.Set[ModelDef]]): Unit = {
+  private def PrepareModelsFactories(tmpModelDefs: Option[scala.collection.immutable.Set[ModelDef]]): Unit = {
     if (tmpModelDefs == None) // Not found any models
       return
 
@@ -481,30 +376,212 @@ class KamanjaMetadata {
 
     // Load all jars first
     modelDefs.foreach(mdl => {
-      LoadJarIfNeeded(mdl)
+      KamanjaMetadata.LoadJarIfNeeded(mdl)
     })
 
     modelDefs.foreach(mdl => {
-      PrepareModel(mdl, false) // Already Loaded required dependency jars before calling this
+      PrepareModelFactory(mdl, false, null) // Already Loaded required dependency jars before calling this
     })
   }
 }
 
 object KamanjaMetadata extends MdBaseResolveInfo {
   var envCtxt: EnvContext = null // Engine will set it once EnvContext is initialized
-  private[this] val LOG = Logger.getLogger(getClass);
+  var gNodeContext: NodeContext = null
+  private[this] val LOG = LogManager.getLogger(getClass);
   private[this] val mdMgr = GetMdMgr
   private[this] var messageContainerObjects = new HashMap[String, MsgContainerObjAndTransformInfo]
-  private[this] var modelObjects = new HashMap[String, MdlInfo]
+  private[this] var modelObjs = new HashMap[String, MdlInfo]
+  private[this] var modelExecOrderedObjects = Array[(String, MdlInfo)]()
+  private[this] var factoryOfMdlInstFactoriesObjects = scala.collection.immutable.Map[String, FactoryOfModelInstanceFactory]()
   private[this] var zkListener: ZooKeeperListener = _
-
+  private[this] var mdlsChangedCntr: Long = 0
+  private[this] var initializedFactOfMdlInstFactObjs = false
   private[this] val reent_lock = new ReentrantReadWriteLock(true);
+  private[this] val updMetadataExecutor = Executors.newFixedThreadPool(1)
 
-  //LOG.setLevel(Level.TRACE)
+  def AllFactoryOfMdlInstFactoriesObjects = factoryOfMdlInstFactoriesObjects.toMap
+
+  def GetAllJarsFromElem(elem: BaseElem): Set[String] = {
+    var allJars: Array[String] = null
+
+    val jarname = if (elem.JarName == null) "" else elem.JarName.trim
+
+    if (elem.DependencyJarNames != null && elem.DependencyJarNames.size > 0 && jarname.size > 0) {
+      allJars = elem.DependencyJarNames :+ jarname
+    } else if (elem.DependencyJarNames != null && elem.DependencyJarNames.size > 0) {
+      allJars = elem.DependencyJarNames
+    } else if (jarname.size > 0) {
+      allJars = Array(jarname)
+    } else {
+      return Set[String]()
+    }
+
+    return allJars.map(j => Utils.GetValidJarFile(KamanjaConfiguration.jarPaths, j)).toSet
+  }
+
+  def LoadJarIfNeeded(elem: BaseElem): Boolean = {
+    val allJars = GetAllJarsFromElem(elem)
+    if (allJars.size > 0) {
+      return Utils.LoadJars(allJars.toArray, KamanjaConfiguration.metadataLoader.loadedJars, KamanjaConfiguration.metadataLoader.loader)
+    } else {
+      return true
+    }
+  }
+
+  def ValidateAllRequiredJars(tmpMsgDefs: Option[scala.collection.immutable.Set[MessageDef]], tmpContainerDefs: Option[scala.collection.immutable.Set[ContainerDef]],
+                              tmpModelDefs: Option[scala.collection.immutable.Set[ModelDef]], tmpModelFactiresDefs: Option[scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef]]): Boolean = {
+    val allJarsToBeValidated = scala.collection.mutable.Set[String]();
+
+    if (tmpMsgDefs != None) { // Not found any messages
+      tmpMsgDefs.get.foreach(elem => {
+        allJarsToBeValidated ++= KamanjaMetadata.GetAllJarsFromElem(elem)
+      })
+    }
+
+    if (tmpContainerDefs != None) { // Not found any messages
+      tmpContainerDefs.get.foreach(elem => {
+        allJarsToBeValidated ++= KamanjaMetadata.GetAllJarsFromElem(elem)
+      })
+    }
+
+    if (tmpModelDefs != None) { // Not found any messages
+      tmpModelDefs.get.foreach(elem => {
+        allJarsToBeValidated ++= KamanjaMetadata.GetAllJarsFromElem(elem)
+      })
+    }
+
+    if (tmpModelFactiresDefs != None) { // Not found any messages
+      tmpModelFactiresDefs.get.foreach(elem => {
+        allJarsToBeValidated ++= KamanjaMetadata.GetAllJarsFromElem(elem)
+      })
+    }
+
+    val nonExistsJars = Utils.CheckForNonExistanceJars(allJarsToBeValidated.toSet)
+    if (nonExistsJars.size > 0) {
+      LOG.error("Not found jars in Messages/Containers/Models Jars List : {" + nonExistsJars.mkString(", ") + "}")
+      return false
+    }
+
+    true
+  }
+
+  private[this] def ResolveFactoryOfModelInstanceFactoryDef(clsName: String, fDef: FactoryOfModelInstanceFactoryDef): FactoryOfModelInstanceFactory = {
+    var isValid = true
+    var curClass: Class[_] = null
+
+    try {
+      // If required we need to enable this test
+      // Convert class name into a class
+      var curClz = Class.forName(clsName, true, KamanjaConfiguration.metadataLoader.loader)
+      curClass = curClz
+
+      isValid = false
+
+      while (curClz != null && isValid == false) {
+        isValid = Utils.isDerivedFrom(curClz, "com.ligadata.KamanjaBase.FactoryOfModelInstanceFactory")
+        if (isValid == false)
+          curClz = curClz.getSuperclass()
+      }
+    } catch {
+      case e: Exception => {
+        LOG.debug("Failed to get model classname :" + clsName)
+        return null
+      }
+    }
+
+    if (isValid) {
+      try {
+        var objinst: Any = null
+        try {
+          // Trying Singleton Object
+          val module = KamanjaConfiguration.metadataLoader.mirror.staticModule(clsName)
+          val obj = KamanjaConfiguration.metadataLoader.mirror.reflectModule(module)
+          // curClz.newInstance
+          objinst = obj.instance
+        } catch {
+          case e: Exception => {
+            val stackTrace = StackTrace.ThrowableTraceString(e)
+            LOG.debug("StackTrace:" + stackTrace)
+            // Trying Regular Object instantiation
+            objinst = curClass.newInstance
+          }
+        }
+
+        if (objinst.isInstanceOf[FactoryOfModelInstanceFactory]) {
+          val factoryObj = objinst.asInstanceOf[FactoryOfModelInstanceFactory]
+          val fName = (fDef.NameSpace.trim + "." + fDef.Name.trim).toLowerCase
+          LOG.info("Created FactoryOfModelInstanceFactory:" + fName)
+          return factoryObj
+        } else {
+          LOG.debug("Failed to instantiate FactoryOfModelInstanceFactory object :" + clsName + ". ObjType0:" + objinst.getClass.getSimpleName + ". ObjType1:" + objinst.getClass.getCanonicalName)
+          return null
+        }
+      } catch {
+        case e: Exception =>
+          LOG.debug("Failed to instantiate FactoryOfModelInstanceFactory object:" + clsName + ". Reason:" + e.getCause + ". Message:" + e.getMessage)
+          return null
+      }
+    }
+    return null
+  }
+
+  def ResolveAllFactoryOfMdlInstFactoriesObjects(): Unit = {
+    val fDefsOptions = mdMgr.FactoryOfMdlInstFactories(true, true)
+    val tmpFactoryOfMdlInstFactObjects = scala.collection.mutable.Map[String, FactoryOfModelInstanceFactory]()
+
+    if (fDefsOptions != None) {
+      val fDefs = fDefsOptions.get
+
+      LOG.debug("Found %d FactoryOfModelInstanceFactory objects".format(fDefs.size))
+
+      fDefs.foreach(f => {
+        LoadJarIfNeeded(f)
+        // else Assuming we are already loaded all the required jars
+
+        var clsName = f.PhysicalName.trim
+        var orgClsName = clsName
+
+        LOG.debug("FactoryOfModelInstanceFactory. FullName:%s, ClassName:%s".format(f.FullName, clsName))
+        var fDefObj = ResolveFactoryOfModelInstanceFactoryDef(clsName, f)
+        if (fDefObj == null) {
+          if (clsName.size > 0 && clsName.charAt(clsName.size - 1) != '$') { // if no $ at the end we are taking $
+            clsName = clsName + "$"
+            fDefObj = ResolveFactoryOfModelInstanceFactoryDef(clsName, f)
+          }
+        }
+
+        if (fDefObj != null) {
+          tmpFactoryOfMdlInstFactObjects(f.FullName.toLowerCase()) = fDefObj
+        } else {
+          LOG.error("Failed to resolve FactoryOfModelInstanceFactory object:%s, Classname:%s".format(f.FullName, orgClsName))
+        }
+      })
+    } else {
+      logger.debug("Not Found any FactoryOfModelInstanceFactory objects")
+    }
+
+    var exp: Exception = null
+
+    reent_lock.writeLock().lock();
+    try {
+      factoryOfMdlInstFactoriesObjects = tmpFactoryOfMdlInstFactObjects.toMap
+    } catch {
+      case e: Exception => {
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.debug("StackTrace:" + stackTrace)
+        exp = e
+      }
+    } finally {
+      reent_lock.writeLock().unlock();
+    }
+    if (exp != null)
+      throw exp
+  }
 
   private def UpdateKamanjaMdObjects(msgObjects: HashMap[String, MsgContainerObjAndTransformInfo], contObjects: HashMap[String, MsgContainerObjAndTransformInfo],
-    mdlObjects: HashMap[String, MdlInfo], removedModels: ArrayBuffer[(String, String, Long)], removedMessages: ArrayBuffer[(String, String, Long)],
-    removedContainers: ArrayBuffer[(String, String, Long)]): Unit = {
+                                     mdlObjects: HashMap[String, MdlInfo], removedModels: ArrayBuffer[(String, String, Long)], removedMessages: ArrayBuffer[(String, String, Long)],
+                                     removedContainers: ArrayBuffer[(String, String, Long)]): Unit = {
 
     var exp: Exception = null
 
@@ -525,17 +602,21 @@ object KamanjaMetadata extends MdBaseResolveInfo {
   }
 
   private def localUpdateKamanjaMdObjects(msgObjects: HashMap[String, MsgContainerObjAndTransformInfo], contObjects: HashMap[String, MsgContainerObjAndTransformInfo],
-    mdlObjects: HashMap[String, MdlInfo], removedModels: ArrayBuffer[(String, String, Long)], removedMessages: ArrayBuffer[(String, String, Long)],
-    removedContainers: ArrayBuffer[(String, String, Long)]): Unit = {
+                                          mdlObjects: HashMap[String, MdlInfo], removedModels: ArrayBuffer[(String, String, Long)], removedMessages: ArrayBuffer[(String, String, Long)],
+                                          removedContainers: ArrayBuffer[(String, String, Long)]): Unit = {
     //BUGBUG:: Assuming there is no issues if we remove the objects first and then add the new objects. We are not adding the object in the same order as it added in the transaction. 
+
+    var mdlsChanged = false
 
     // First removing the objects
     // Removing Models
     if (removedModels != null && removedModels.size > 0) {
+      val prevCnt = modelObjs.size
       removedModels.foreach(mdl => {
         val elemName = (mdl._1.trim + "." + mdl._2.trim).toLowerCase
-        modelObjects -= elemName
+        modelObjs -= elemName
       })
+      mdlsChanged = (prevCnt != modelObjs.size)
     }
 
     // Removing Messages
@@ -562,6 +643,7 @@ object KamanjaMetadata extends MdBaseResolveInfo {
         val containerNames = contObjects.map(container => container._1.toLowerCase).toList.sorted.toArray // Sort topics by names
         val containerInfos = containerNames.map(c => { ContainerNameAndDatastoreInfo(c, null) })
         envCtxt.RegisterMessageOrContainers(containerInfos) // Containers
+        envCtxt.CacheContainers(KamanjaConfiguration.clusterId) // Load data for Caching
       }
     }
 
@@ -572,12 +654,15 @@ object KamanjaMetadata extends MdBaseResolveInfo {
         val topMessageNames = msgObjects.filter(msg => msg._2.parents.size == 0).map(msg => msg._1.toLowerCase).toList.sorted.toArray // Sort topics by names
         val messagesInfos = topMessageNames.map(c => { ContainerNameAndDatastoreInfo(c, null) })
         envCtxt.RegisterMessageOrContainers(messagesInfos) // Messages
+        envCtxt.CacheContainers(KamanjaConfiguration.clusterId) // Load data for Caching
       }
     }
 
     // Adding Models
-    if (mdlObjects != null && mdlObjects.size > 0)
-      modelObjects ++= mdlObjects
+    if (mdlObjects != null && mdlObjects.size > 0) {
+      mdlsChanged = true // already checked for mdlObjects.size > 0
+      modelObjs ++= mdlObjects
+    }
 
     // If messages/Containers removed or added, jsut change the parents chain
     if ((removedMessages != null && removedMessages.size > 0) ||
@@ -621,6 +706,43 @@ object KamanjaMetadata extends MdBaseResolveInfo {
         m._2.parents.reverse
       })
     }
+
+    // Order Models (if property is given) if we added any
+    if (mdlObjects != null && mdlObjects.size > 0) {
+      // Order Models Execution
+      val tmpExecOrderStr = mdMgr.GetUserProperty(KamanjaConfiguration.clusterId, "modelsexecutionorder")
+      val ExecOrderStr = if (tmpExecOrderStr != null) tmpExecOrderStr.trim.toLowerCase.split(",").map(s => s.trim).filter(s => s.size > 0) else Array[String]()
+
+      if (ExecOrderStr.size > 0 && modelObjs != null) {
+        var mdlsOrder = ArrayBuffer[(String, MdlInfo)]()
+        ExecOrderStr.foreach(mdlNm => {
+          val m = modelObjs.getOrElse(mdlNm, null)
+          if (m != null)
+            mdlsOrder += ((mdlNm, m))
+        })
+
+        var orderedMdlsSet = ExecOrderStr.toSet
+        modelObjs.foreach(kv => {
+          val mdlNm = kv._1.toLowerCase()
+          if (orderedMdlsSet.contains(mdlNm) == false)
+            mdlsOrder += ((mdlNm, kv._2))
+        })
+
+        LOG.warn("Models Order changed from %s to %s".format(modelObjs.map(kv => kv._1).mkString(","), mdlsOrder.map(kv => kv._1).mkString(",")))
+        modelExecOrderedObjects = mdlsOrder.toArray
+      } else {
+        modelExecOrderedObjects = if (modelObjs != null) modelObjs.toArray else Array[(String, MdlInfo)]()
+      }
+
+      mdlsChanged = true
+    } else {
+      modelExecOrderedObjects = Array[(String, MdlInfo)]()
+    }
+
+    LOG.debug("mdlsChanged:" + mdlsChanged.toString)
+
+    if (mdlsChanged)
+      mdlsChangedCntr += 1
   }
 
   def InitBootstrap: Unit = {
@@ -635,9 +757,13 @@ object KamanjaMetadata extends MdBaseResolveInfo {
     val obj = new KamanjaMetadata
 
     try {
+      if (initializedFactOfMdlInstFactObjs == false) {
+        KamanjaMetadata.ResolveAllFactoryOfMdlInstFactoriesObjects()
+        initializedFactOfMdlInstFactObjs = true
+      }
       obj.LoadMdMgrElems(tmpMsgDefs, tmpContainerDefs, tmpModelDefs)
       // Lock the global object here and update the global objects
-      UpdateKamanjaMdObjects(obj.messageObjects, obj.containerObjects, obj.modelObjects, null, null, null)
+      UpdateKamanjaMdObjects(obj.messageObjects, obj.containerObjects, obj.modelObjsMap, null, null, null)
     } catch {
       case e: Exception => {
         LOG.error("Failed to load messages, containers & models from metadata manager. Reason:%s Message:%s".format(e.getCause, e.getMessage))
@@ -660,7 +786,6 @@ object KamanjaMetadata extends MdBaseResolveInfo {
     }
   }
 
-  // Assuming mdMgr is locked at this moment for not to update while doing this operation
   def UpdateMetadata(receivedJsonStr: String): Unit = {
 
     LOG.info("Process ZooKeeper notification " + receivedJsonStr)
@@ -681,224 +806,275 @@ object KamanjaMetadata extends MdBaseResolveInfo {
       LOG.error("Metadata Manager should not be NULL while updaing metadta in Kamanja manager.")
       return
     }
+    
+    if (zkTransaction.transactionId.getOrElse("0").toLong <= MetadataAPIImpl.getCurrentTranLevel) return
 
-    MetadataAPIImpl.UpdateMdMgr(zkTransaction)
+    updMetadataExecutor.execute(new MetadataUpdate(zkTransaction))
+  }
 
-    val obj = new KamanjaMetadata
-
-    // BUGBUG:: Not expecting added element & Removed element will happen in same transaction at this moment
-    // First we are adding what ever we need to add, then we are removing. So, we are locking before we append to global array and remove what ever is gone.
-    val removedModels = new ArrayBuffer[(String, String, Long)]
-    val removedMessages = new ArrayBuffer[(String, String, Long)]
-    val removedContainers = new ArrayBuffer[(String, String, Long)]
-
-    //// Check for Jars -- Begin
-    val allJarsToBeValidated = scala.collection.mutable.Set[String]();
-
-    val unloadMsgsContainers = scala.collection.mutable.Set[String]()
-
-    var removedValues = 0
-
-    zkTransaction.Notifications.foreach(zkMessage => {
-      val key = zkMessage.NameSpace + "." + zkMessage.Name + "." + zkMessage.Version
-      LOG.debug("Processing ZooKeeperNotification, the object => " + key + ",objectType => " + zkMessage.ObjectType + ",Operation => " + zkMessage.Operation)
-      zkMessage.ObjectType match {
-        case "ModelDef" => {
-          zkMessage.Operation match {
-            case "Add" => {
-              try {
-                val mdl = mdMgr.Model(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
-                if (mdl != None) {
-                  allJarsToBeValidated ++= obj.GetAllJarsFromElem(mdl.get)
-                }
-              } catch {
-                case e: Exception => {
-                  val stackTrace = StackTrace.ThrowableTraceString(e)
-                  LOG.debug("StackTrace:" + stackTrace)
-                }
-              }
-            }
-            case "Remove" | "Deactivate" => { removedValues += 1 }
-            case _ => {}
-          }
-        }
-        case "MessageDef" => {
-          unloadMsgsContainers += (zkMessage.NameSpace + "." + zkMessage.Name)
-          zkMessage.Operation match {
-            case "Add" => {
-              try {
-                val msg = mdMgr.Message(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
-                if (msg != None) {
-                  allJarsToBeValidated ++= obj.GetAllJarsFromElem(msg.get)
-                }
-              } catch {
-                case e: Exception => {
-                  val stackTrace = StackTrace.ThrowableTraceString(e)
-                  LOG.error("StackTrace:" + stackTrace)
-                }
-              }
-            }
-            case "Remove" => { removedValues += 1 }
-            case _ => {}
-          }
-        }
-        case "ContainerDef" => {
-          unloadMsgsContainers += (zkMessage.NameSpace + "." + zkMessage.Name)
-          zkMessage.Operation match {
-            case "Add" => {
-              try {
-                val container = mdMgr.Container(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
-                if (container != None) {
-                  allJarsToBeValidated ++= obj.GetAllJarsFromElem(container.get)
-                }
-              } catch {
-                case e: Exception => {
-                  val stackTrace = StackTrace.ThrowableTraceString(e)
-                  LOG.error("StackTrace:" + stackTrace)
-                }
-              }
-            }
-            case "Remove" => { removedValues += 1 }
-            case _ => {}
-          }
-        }
-        case _ => {}
-      }
-    })
-
-    // Removed some elements
-    if (removedValues > 0) {
-      reent_lock.writeLock().lock();
+  // Assuming mdMgr is locked at this moment for not to update while doing this operation
+  class MetadataUpdate(val zkTransaction: ZooKeeperTransaction) extends Runnable {
+    def run() {
+      var txnCtxt: TransactionContext = null
+      var txnId = KamanjaConfiguration.nodeId.toString.hashCode()
+      if (txnId > 0)
+        txnId = -1 * txnId
+      // Finally we are taking -ve txnid for this
       try {
-        KamanjaConfiguration.metadataLoader = new KamanjaLoaderInfo(KamanjaConfiguration.metadataLoader, true, true)
-        envCtxt.SetClassLoader(KamanjaConfiguration.metadataLoader.loader)
+        txnCtxt = new TransactionContext(txnId, KamanjaMetadata.gNodeContext, Array[Byte](), "")
+        ThreadLocalStorage.txnContextInfo.set(txnCtxt)
+        run1(txnCtxt)
       } catch {
-        case e: Exception => {
-        }
+        case e: Exception => throw e
+        case e: Throwable => throw e
       } finally {
-        reent_lock.writeLock().unlock();
+        ThreadLocalStorage.txnContextInfo.remove
+        if (txnCtxt != null) {
+          KamanjaMetadata.gNodeContext.getEnvCtxt.rollbackData(txnId)
+        }
       }
     }
 
-    if (unloadMsgsContainers.size > 0)
-      envCtxt.clearIntermediateResults(unloadMsgsContainers.toArray)
+    private def run1(txnCtxt: TransactionContext) {
+      if (updMetadataExecutor.isShutdown)
+        return
 
-    val nonExistsJars = Utils.CheckForNonExistanceJars(allJarsToBeValidated.toSet)
-    if (nonExistsJars.size > 0) {
-      LOG.error("Not found jars in Messages/Containers/Models Jars List : {" + nonExistsJars.mkString(", ") + "}")
-      // return
-    }
+      if (zkTransaction == null || zkTransaction.Notifications.size == 0) {
+        // nothing to do
+        return
+      }
 
-    //// Check for Jars -- End
+      if (mdMgr == null) {
+        LOG.error("Metadata Manager should not be NULL while updaing metadta in Kamanja manager.")
+        return
+      }
 
-    zkTransaction.Notifications.foreach(zkMessage => {
-      val key = zkMessage.NameSpace + "." + zkMessage.Name + "." + zkMessage.Version.toLong
-      LOG.info("Processing ZooKeeperNotification, the object => " + key + ",objectType => " + zkMessage.ObjectType + ",Operation => " + zkMessage.Operation)
-      zkMessage.ObjectType match {
-        case "ModelDef" => {
-          zkMessage.Operation match {
-            case "Add" | "Activate" => {
-              try {
-                val mdl = mdMgr.Model(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
-                if (mdl != None) {
-                  obj.PrepareModel(mdl.get, true)
-                } else {
-                  LOG.error("Failed to find Model:" + key)
-                }
-              } catch {
-                case e: Exception => {
+      MetadataAPIImpl.UpdateMdMgr(zkTransaction)
 
-                  LOG.error("Failed to Add Model:" + key)
+      if (updMetadataExecutor.isShutdown)
+        return
+
+      val obj = new KamanjaMetadata
+
+      // BUGBUG:: Not expecting added element & Removed element will happen in same transaction at this moment
+      // First we are adding what ever we need to add, then we are removing. So, we are locking before we append to global array and remove what ever is gone.
+      val removedModels = new ArrayBuffer[(String, String, Long)]
+      val removedMessages = new ArrayBuffer[(String, String, Long)]
+      val removedContainers = new ArrayBuffer[(String, String, Long)]
+
+      //// Check for Jars -- Begin
+      val allJarsToBeValidated = scala.collection.mutable.Set[String]();
+
+      val unloadMsgsContainers = scala.collection.mutable.Set[String]()
+
+      var removedValues = 0
+
+      zkTransaction.Notifications.foreach(zkMessage => {
+        if (updMetadataExecutor.isShutdown)
+          return
+        val key = zkMessage.NameSpace + "." + zkMessage.Name + "." + zkMessage.Version
+        LOG.debug("Processing ZooKeeperNotification, the object => " + key + ",objectType => " + zkMessage.ObjectType + ",Operation => " + zkMessage.Operation)
+        zkMessage.ObjectType match {
+          case "ModelDef" => {
+            zkMessage.Operation match {
+              case "Add" => {
+                try {
+                  val mdl = mdMgr.Model(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
+                  if (mdl != None) {
+                    allJarsToBeValidated ++= GetAllJarsFromElem(mdl.get)
+                  }
+                } catch {
+                  case e: Exception => {
+                    val stackTrace = StackTrace.ThrowableTraceString(e)
+                    LOG.debug("StackTrace:" + stackTrace)
+                  }
                 }
               }
-            }
-            case "Remove" | "Deactivate" => {
-              try {
-                removedModels += ((zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong))
-              } catch {
-                case e: Exception => {
-
-                  LOG.error("Failed to Remove Model:" + key)
-                }
-              }
-            }
-            case _ => {
-              LOG.error("Unknown Operation " + zkMessage.Operation + " in zookeeper notification, notification is not processed ..")
+              case "Remove" | "Deactivate" => { removedValues += 1 }
+              case _                       => {}
             }
           }
-        }
-        case "MessageDef" => {
-          zkMessage.Operation match {
-            case "Add" => {
-              try {
-                val msg = mdMgr.Message(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
-                if (msg != None) {
-                  obj.PrepareMessage(msg.get, true)
-                } else {
-                  LOG.error("Failed to find Message:" + key)
-                }
-              } catch {
-                case e: Exception => {
-                  LOG.error("Failed to Add Message:" + key)
-                }
-              }
-            }
-            case "Remove" => {
-              try {
-                removedMessages += ((zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong))
-              } catch {
-                case e: Exception => {
-                  LOG.error("Failed to Remove Message:" + key)
+          case "MessageDef" => {
+            unloadMsgsContainers += (zkMessage.NameSpace + "." + zkMessage.Name)
+            zkMessage.Operation match {
+              case "Add" => {
+                try {
+                  val msg = mdMgr.Message(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
+                  if (msg != None) {
+                    allJarsToBeValidated ++= GetAllJarsFromElem(msg.get)
+                  }
+                } catch {
+                  case e: Exception => {
+                    val stackTrace = StackTrace.ThrowableTraceString(e)
+                    LOG.error("StackTrace:" + stackTrace)
+                  }
                 }
               }
-            }
-            case _ => {
-              LOG.error("Unknown Operation " + zkMessage.Operation + " in zookeeper notification, notification is not processed ..")
+              case "Remove" => { removedValues += 1 }
+              case _        => {}
             }
           }
-        }
-        case "ContainerDef" => {
-          zkMessage.Operation match {
-            case "Add" => {
-              try {
-                val container = mdMgr.Container(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
-                if (container != None) {
-                  obj.PrepareContainer(container.get, true, false)
-                } else {
-                  LOG.error("Failed to find Container:" + key)
-                }
-              } catch {
-                case e: Exception => {
-                  LOG.error("Failed to Add Container:" + key)
-                }
-              }
-            }
-            case "Remove" => {
-              try {
-                removedContainers += ((zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong))
-              } catch {
-                case e: Exception => {
-
-                  LOG.error("Failed to Remove Container:" + key)
+          case "ContainerDef" => {
+            unloadMsgsContainers += (zkMessage.NameSpace + "." + zkMessage.Name)
+            zkMessage.Operation match {
+              case "Add" => {
+                try {
+                  val container = mdMgr.Container(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
+                  if (container != None) {
+                    allJarsToBeValidated ++= GetAllJarsFromElem(container.get)
+                  }
+                } catch {
+                  case e: Exception => {
+                    val stackTrace = StackTrace.ThrowableTraceString(e)
+                    LOG.error("StackTrace:" + stackTrace)
+                  }
                 }
               }
-            }
-            case _ => {
-              LOG.error("Unknown Operation " + zkMessage.Operation + " in zookeeper notification, notification is not processed ..")
+              case "Remove" => { removedValues += 1 }
+              case _        => {}
             }
           }
+          case _ => {}
         }
-        case "OutputMsgDef" => {
+      })
 
-        }
-        case _ => {
-          LOG.warn("Unknown objectType " + zkMessage.ObjectType + " in zookeeper notification, notification is not processed ..")
+      // Removed some elements
+      if (removedValues > 0) {
+        reent_lock.writeLock().lock();
+        try {
+          KamanjaConfiguration.metadataLoader = new KamanjaLoaderInfo(KamanjaConfiguration.metadataLoader, true, true)
+          envCtxt.SetClassLoader(KamanjaConfiguration.metadataLoader.loader)
+        } catch {
+          case e: Exception => {
+          }
+        } finally {
+          reent_lock.writeLock().unlock();
         }
       }
-    })
 
-    // Lock the global object here and update the global objects
-    UpdateKamanjaMdObjects(obj.messageObjects, obj.containerObjects, obj.modelObjects, removedModels, removedMessages, removedContainers)
+      if (unloadMsgsContainers.size > 0)
+        envCtxt.clearIntermediateResults(unloadMsgsContainers.toArray)
+
+      val nonExistsJars = Utils.CheckForNonExistanceJars(allJarsToBeValidated.toSet)
+      if (nonExistsJars.size > 0) {
+        LOG.error("Not found jars in Messages/Containers/Models Jars List : {" + nonExistsJars.mkString(", ") + "}")
+        // return
+      }
+
+      //// Check for Jars -- End
+
+      zkTransaction.Notifications.foreach(zkMessage => {
+        if (updMetadataExecutor.isShutdown)
+          return
+        val key = zkMessage.NameSpace + "." + zkMessage.Name + "." + zkMessage.Version.toLong
+        LOG.info("Processing ZooKeeperNotification, the object => " + key + ",objectType => " + zkMessage.ObjectType + ",Operation => " + zkMessage.Operation)
+        zkMessage.ObjectType match {
+          case "ModelDef" => {
+            zkMessage.Operation match {
+              case "Add" | "Activate" => {
+                try {
+                  val mdl = mdMgr.Model(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
+                  if (mdl != None) {
+                    obj.PrepareModelFactory(mdl.get, true, txnCtxt)
+                  } else {
+                    LOG.error("Failed to find Model:" + key)
+                  }
+                } catch {
+                  case e: Exception => {
+
+                    LOG.error("Failed to Add Model:" + key)
+                  }
+                }
+              }
+              case "Remove" | "Deactivate" => {
+                try {
+                  removedModels += ((zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong))
+                } catch {
+                  case e: Exception => {
+
+                    LOG.error("Failed to Remove Model:" + key)
+                  }
+                }
+              }
+              case _ => {
+                LOG.error("Unknown Operation " + zkMessage.Operation + " in zookeeper notification, notification is not processed ..")
+              }
+            }
+          }
+          case "MessageDef" => {
+            zkMessage.Operation match {
+              case "Add" => {
+                try {
+                  val msg = mdMgr.Message(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
+                  if (msg != None) {
+                    obj.PrepareMessage(msg.get, true)
+                  } else {
+                    LOG.error("Failed to find Message:" + key)
+                  }
+                } catch {
+                  case e: Exception => {
+                    LOG.error("Failed to Add Message:" + key)
+                  }
+                }
+              }
+              case "Remove" => {
+                try {
+                  removedMessages += ((zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong))
+                } catch {
+                  case e: Exception => {
+                    LOG.error("Failed to Remove Message:" + key)
+                  }
+                }
+              }
+              case _ => {
+                LOG.error("Unknown Operation " + zkMessage.Operation + " in zookeeper notification, notification is not processed ..")
+              }
+            }
+          }
+          case "ContainerDef" => {
+            zkMessage.Operation match {
+              case "Add" => {
+                try {
+                  val container = mdMgr.Container(zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong, true)
+                  if (container != None) {
+                    obj.PrepareContainer(container.get, true, false)
+                  } else {
+                    LOG.error("Failed to find Container:" + key)
+                  }
+                } catch {
+                  case e: Exception => {
+                    LOG.error("Failed to Add Container:" + key)
+                  }
+                }
+              }
+              case "Remove" => {
+                try {
+                  removedContainers += ((zkMessage.NameSpace, zkMessage.Name, zkMessage.Version.toLong))
+                } catch {
+                  case e: Exception => {
+
+                    LOG.error("Failed to Remove Container:" + key)
+                  }
+                }
+              }
+              case _ => {
+                LOG.error("Unknown Operation " + zkMessage.Operation + " in zookeeper notification, notification is not processed ..")
+              }
+            }
+          }
+          case "OutputMsgDef" => {
+
+          }
+          case _ => {
+            LOG.warn("Unknown objectType " + zkMessage.ObjectType + " in zookeeper notification, notification is not processed ..")
+          }
+        }
+      })
+
+      // Lock the global object here and update the global objects
+      if (updMetadataExecutor.isShutdown == false)
+        UpdateKamanjaMdObjects(obj.messageObjects, obj.containerObjects, obj.modelObjsMap, removedModels, removedMessages, removedContainers)
+    }
   }
 
   override def getMessgeOrContainerInstance(MsgContainerType: String): MessageContainerBase = {
@@ -1018,9 +1194,9 @@ object KamanjaMetadata extends MdBaseResolveInfo {
     v
   }
 
-  def getAllModels: Map[String, MdlInfo] = {
+  def getAllModels: (Array[(String, MdlInfo)], Long) = {
     var exp: Exception = null
-    var v: Map[String, MdlInfo] = null
+    var v: Array[(String, MdlInfo)] = null
 
     reent_lock.readLock().lock();
     try {
@@ -1036,7 +1212,7 @@ object KamanjaMetadata extends MdBaseResolveInfo {
     }
     if (exp != null)
       throw exp
-    v
+    (v, mdlsChangedCntr)
   }
 
   def getAllContainers: Map[String, MsgContainerObjAndTransformInfo] = {
@@ -1069,8 +1245,8 @@ object KamanjaMetadata extends MdBaseResolveInfo {
   }
 
   private def localgetModel(mdlName: String): MdlInfo = {
-    if (modelObjects == null) return null
-    modelObjects.getOrElse(mdlName.toLowerCase, null)
+    if (modelObjs == null) return null
+    modelObjs.getOrElse(mdlName.toLowerCase, null)
   }
 
   private def localgetContainer(containerName: String): MsgContainerObjAndTransformInfo = {
@@ -1096,9 +1272,8 @@ object KamanjaMetadata extends MdBaseResolveInfo {
     }).toMap
   }
 
-  private def localgetAllModels: Map[String, MdlInfo] = {
-    if (modelObjects == null) return null
-    modelObjects.toMap
+  private def localgetAllModels: Array[(String, MdlInfo)] = {
+    modelExecOrderedObjects
   }
 
   private def localgetAllContainers: Map[String, MsgContainerObjAndTransformInfo] = {
@@ -1116,6 +1291,14 @@ object KamanjaMetadata extends MdBaseResolveInfo {
     if (zkListener != null)
       zkListener.Shutdown
     zkListener = null
+    if (updMetadataExecutor != null) {
+      updMetadataExecutor.shutdownNow
+      while (updMetadataExecutor.isTerminated == false) {
+        Thread.sleep(100)
+      }
+    }
   }
+
+  def GetModelsChangedCounter = mdlsChangedCntr
 }
 

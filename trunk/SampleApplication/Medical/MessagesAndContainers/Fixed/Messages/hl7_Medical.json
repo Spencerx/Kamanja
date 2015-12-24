@@ -1,6 +1,6 @@
 {
     "Message": {
-        "NameSpace": "System",
+        "NameSpace": "com.ligadata.kamanja.samples.messages",
         "Name": "HL7",
         "Version": "00.01.00",
         "Description": "HL7",

@@ -32,7 +32,7 @@ import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.conf.Configuration;
 
 import org.apache.hadoop.hbase._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import java.nio.ByteBuffer
 import java.io.IOException
@@ -55,7 +55,7 @@ import com.ligadata.Exceptions._
 class AuditHBaseAdapter extends AuditAdapter
 {
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   var keyspace: String = _ 
   var hostnames: String = _
   var table: String = _

@@ -20,7 +20,7 @@ import org.mapdb._;
 import com.ligadata.keyvaluestore._
 import java.io.File;
 import java.nio.ByteBuffer
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.Exceptions._
 import com.ligadata.Exceptions.StackTrace
 
@@ -53,7 +53,7 @@ class KeyValueHashMap(parameter: PropertyMap) extends DataStore {
   val withTransactions = parameter.getOrElse("withtransaction", "false").toBoolean
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   var db: DB = null
 

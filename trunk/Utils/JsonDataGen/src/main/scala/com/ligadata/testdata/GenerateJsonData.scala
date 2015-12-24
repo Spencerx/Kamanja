@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 import java.io.File
 import java.io.PrintWriter
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object GenerateJsonData {
 
@@ -72,7 +72,7 @@ object GenerateJsonData {
 
 class GenerateJsonData {
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   def processInputData(inputfile: String, outputfile: String, formatfile: String) = {
     try {
       var outfile = new PrintWriter(new File(outputfile))

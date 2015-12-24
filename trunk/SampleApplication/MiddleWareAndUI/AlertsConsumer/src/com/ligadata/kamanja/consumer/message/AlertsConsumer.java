@@ -18,7 +18,7 @@ package com.ligadata.kamanja.consumer.message;
 
 import kafka.consumer.KafkaStream;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.{ Logger, LogManager };
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -26,7 +26,7 @@ import org.json.simple.parser.ParseException;
 
 public class AlertsConsumer extends AbstractConsumer {
 
-	private Logger logger = Logger.getLogger(AlertsConsumer.class);
+	private Logger logger = LogManager.getLogger(AlertsConsumer.class);
 
 	public AlertsConsumer(KafkaStream<byte[], byte[]> stream, int threadNumbe) {
 		super(stream, threadNumbe);

@@ -17,24 +17,22 @@
 package com.ligadata.samples.models
 
 import com.ligadata.KamanjaBase._
-import com.ligadata.KamanjaBase.{ TimeRange, ModelBaseObj, ModelBase, ModelResultBase, TransactionContext, ModelContext }
-import com.ligadata.KamanjaBase.{ BaseMsg, BaseContainer, RddUtils, RddDate, BaseContainerObj, MessageContainerBase, RDDObject, RDD }
-import System._
+import com.ligadata.KvBase.TimeRange
+import com.ligadata.kamanja.metadata.ModelDef;
 
-
-object HelloWorldModel extends ModelBaseObj {
-  override def IsValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[msg1]
-  override def CreateNewModel(mdlCtxt: ModelContext): ModelBase = return new HelloWorldModel(mdlCtxt)
-  override def ModelName: String = "HelloWorldModel" 
-  override def Version: String = "0.0.1"
-  override def CreateResultObject(): ModelResultBase = new MappedModelResults()
+class HelloWorldModelFactory(modelDef: ModelDef, nodeContext: NodeContext) extends ModelInstanceFactory(modelDef, nodeContext) {
+  override def isValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[msg1]
+  override def createModelInstance(): ModelInstance = return new HelloWorldModel(this)
+  override def getModelName: String = "HelloWorldModel" 
+  override def getVersion: String = "0.0.1"
+  override def createResultObject(): ModelResultBase = new MappedModelResults()
 }
 
-class HelloWorldModel(mdlCtxt : ModelContext) extends ModelBase(mdlCtxt, HelloWorldModel) {
+class HelloWorldModel(factory: ModelInstanceFactory) extends ModelInstance(factory) {
   
-   override def execute(emitAllResults:Boolean):ModelResultBase = {
+   override def execute(txnCtxt: TransactionContext, outputDefault: Boolean):ModelResultBase = {
      
-     var helloWorld : msg1 =  mdlCtxt.msg.asInstanceOf[msg1]
+     var helloWorld : msg1 =  txnCtxt.getMessage().asInstanceOf[msg1]
      
         if(helloWorld.score!=1)
           return null;
@@ -42,7 +40,7 @@ class HelloWorldModel(mdlCtxt : ModelContext) extends ModelBase(mdlCtxt, HelloWo
      var actualResults: Array[Result] = Array[Result](new Result("Id",helloWorld.id),
                                                         new Result("Name",helloWorld.Name),
                                                         new Result("Score",helloWorld.score))
-     return HelloWorldModel.CreateResultObject().asInstanceOf[MappedModelResults].withResults(actualResults)
+     return factory.createResultObject().asInstanceOf[MappedModelResults].withResults(actualResults)
    }
    
   

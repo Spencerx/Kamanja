@@ -18,14 +18,14 @@ package com.ligadata.messagedef
 
 import com.ligadata.kamanja.metadata.MdMgr
 import scala.collection.mutable.ArrayBuffer
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
 
 class ConstantMsgObjVarGenerator {
 
   var rddHandler = new RDDHandler
   val logger = this.getClass.getName
-  lazy val LOG = Logger.getLogger(logger)
+  lazy val LOG = LogManager.getLogger(logger)
 
   def partitionkeyStrObj(message: Message, partitionPos: Array[Int]): String = {
     val pad1 = "\t"
@@ -509,7 +509,7 @@ import com.ligadata.BaseTypes._
 import com.ligadata.KamanjaBase.SerializeDeserialize
 import java.io.{ DataInputStream, DataOutputStream , ByteArrayOutputStream}
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import java.util.Date
 """
     val versionPkgImport = verPkg + otherImprts + imprt
@@ -944,6 +944,16 @@ class XmlData(var dataInput: String) extends InputData(){ }
     }
     computeTmPartition
   }
+  
+  def getTimePartition(msg: Message) : String = {
+    """
+    def getTimePartition() : """+msg.Name +""" = {
+		timePartitionData = ComputeTimePartitionData
+		 return this;
+	}
+    
+    """    
+  }
 
   def transactionIdFuncs(message: Message): String = {
 
@@ -972,7 +982,7 @@ class XmlData(var dataInput: String) extends InputData(){ }
 
   def logStackTrace = {
     """
-    private val LOG = Logger.getLogger(getClass)
+    private val LOG = LogManager.getLogger(getClass)
     """
 
   }

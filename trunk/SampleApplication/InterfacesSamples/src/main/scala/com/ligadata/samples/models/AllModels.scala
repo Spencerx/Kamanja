@@ -16,8 +16,9 @@
 
 package com.ligadata.models.samples.models
 
+import com.ligadata.kamanja.metadata.{ ModelDef }
 import com.ligadata.KamanjaBase.{ BaseMsg, BaseContainer, RddUtils, RddDate, BaseContainerObj, MessageContainerBase, RDDObject, RDD }
-import com.ligadata.KamanjaBase.{ ModelBaseObj, ModelBase, ModelResultBase, TransactionContext, ModelContext }
+import com.ligadata.KamanjaBase.{ ModelInstance, ModelInstanceFactory, ModelResultBase, TransactionContext, EnvContext, NodeContext }
 import com.ligadata.samples.messages.{ CustAlertHistory, GlobalPreferences, CustPreferences, CustTransaction }
 import RddUtils._
 import RddDate._
@@ -26,6 +27,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import scala.io.Source
 import java.io.{ DataInputStream, DataOutputStream }
+import com.ligadata.kamanja.metadata.ModelDef;
 
 // Implementation notes:
 //   There is no need to pass context in every call to Builder or getRecent as the context is stored
@@ -69,12 +71,12 @@ import java.io.{ DataInputStream, DataOutputStream }
 //   LowBalanceAlertRslt - a new entry is created - system decides what to do with the generated object
 //
 
-object LowBalanceAlert extends ModelBaseObj {
-  override def IsValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[CustTransaction]
-  override def CreateNewModel(mdlCtxt: ModelContext): ModelBase = return new LowBalanceAlert(mdlCtxt)
-  override def ModelName(): String = "LowBalanceAlert" // Model Name
-  override def Version(): String = "0.0.1" // Model Version
-  override def CreateResultObject(): ModelResultBase = new LowBalanceAlertResult()
+class LowBalanceAlertFactory(modelDef: ModelDef, nodeContext: NodeContext) extends ModelInstanceFactory(modelDef, nodeContext) {
+  override def getModelName(): String = "LowBalanceAlert" // Model Name
+  override def getVersion(): String = "0.0.1" // Model Version
+  override def isValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[CustTransaction] // Check to fire the model
+  override def createModelInstance(): ModelInstance = return new LowBalanceAlert(this) // Creating same type of object with given values 
+  override def createResultObject(): ModelResultBase = new LowBalanceAlertResult() // ResultClass associated the model. Mainly used for Returning results as well as Deserialization
 }
 
 class LowBalanceAlertResult extends ModelResultBase {
@@ -160,8 +162,8 @@ class LowBalanceAlertResult extends ModelResultBase {
   }
 }
 
-class LowBalanceAlert(mdlCtxt: ModelContext) extends ModelBase(mdlCtxt, LowBalanceAlert) {
-  override def execute(emitAllResults: Boolean): ModelResultBase = {
+class LowBalanceAlert(factory: ModelInstanceFactory) extends ModelInstance(factory) {
+  override def execute(txnCtxt: TransactionContext, outputDefault: Boolean): ModelResultBase = {
     // First check the preferences and decide whether to continue or not
     val gPref = GlobalPreferences.getRecentOrNew(Array("Type1"))
     val pref = CustPreferences.getRecentOrNew
@@ -183,7 +185,7 @@ class LowBalanceAlert(mdlCtxt: ModelContext) extends ModelBase(mdlCtxt, LowBalan
     // create new alert history record and persist (if policy is to keep only one, this will replace existing one)
     CustAlertHistory.build.withAlertDtTmInMs(curTmInMs).withAlertType("lowBalanceAlert").Save
     // results
-    LowBalanceAlert.CreateResultObject().asInstanceOf[LowBalanceAlertResult].withCustId(rcntTxn.get.custid).withBranchId(rcntTxn.get.branchid).withAccNo(rcntTxn.get.accno).withCurBalance(rcntTxn.get.balance).withAlertType("lowBalanceAlert").withTriggerTime(curTmInMs)
+    factory.createResultObject().asInstanceOf[LowBalanceAlertResult].withCustId(rcntTxn.get.custid).withBranchId(rcntTxn.get.branchid).withAccNo(rcntTxn.get.accno).withCurBalance(rcntTxn.get.balance).withAlertType("lowBalanceAlert").withTriggerTime(curTmInMs)
   }
 }
 
@@ -208,15 +210,15 @@ class LowBalanceAlert(mdlCtxt: ModelContext) extends ModelBase(mdlCtxt, LowBalan
 //   LowBalanceAlertRslt - a new entry is created - system decides what to do with the generated object
 //
 
-object LowBalanceAlert2 extends ModelBaseObj {
-  override def IsValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[CustTransaction]
-  override def CreateNewModel(mdlCtxt: ModelContext): ModelBase = return new LowBalanceAlert2(mdlCtxt)
-  override def ModelName(): String = "LowBalanceAlert2" // Model Name
-  override def Version(): String = "0.0.1" // Model Version
-  override def CreateResultObject(): ModelResultBase = new LowBalanceAlertResult2()
+class LowBalanceAlert2Factory(modelDef: ModelDef, nodeContext: NodeContext) extends ModelInstanceFactory(modelDef, nodeContext) {
+  override def getModelName(): String = "LowBalanceAlert2" // Model Name
+  override def getVersion(): String = "0.0.1" // Model Version
+  override def isValidMessage(msg: MessageContainerBase): Boolean = return msg.isInstanceOf[CustTransaction] // Check to fire the model
+  override def createModelInstance(): ModelInstance = return new LowBalanceAlert2(this) // Creating same type of object with given values 
+  override def createResultObject(): ModelResultBase = new LowBalanceAlert2Result() // ResultClass associated the model. Mainly used for Returning results as well as Deserialization
 }
 
-class LowBalanceAlertResult2 extends ModelResultBase {
+class LowBalanceAlert2Result extends ModelResultBase {
   var custId: Long = 0;
   var branchId: Int = 0;
   var accNo: Long = 0;
@@ -224,32 +226,32 @@ class LowBalanceAlertResult2 extends ModelResultBase {
   var alertType: String = ""
   var triggerTime: Long = 0
 
-  def withCustId(cId: Long): LowBalanceAlertResult2 = {
+  def withCustId(cId: Long): LowBalanceAlert2Result = {
     custId = cId
     this
   }
 
-  def withBranchId(bId: Int): LowBalanceAlertResult2 = {
+  def withBranchId(bId: Int): LowBalanceAlert2Result = {
     branchId = bId
     this
   }
 
-  def withAccNo(aNo: Long): LowBalanceAlertResult2 = {
+  def withAccNo(aNo: Long): LowBalanceAlert2Result = {
     accNo = aNo
     this
   }
 
-  def withCurBalance(curBal: Double): LowBalanceAlertResult2 = {
+  def withCurBalance(curBal: Double): LowBalanceAlert2Result = {
     curBalance = curBal
     this
   }
 
-  def withAlertType(alertTyp: String): LowBalanceAlertResult2 = {
+  def withAlertType(alertTyp: String): LowBalanceAlert2Result = {
     alertType = alertTyp
     this
   }
 
-  def withTriggerTime(triggerTm: Long): LowBalanceAlertResult2 = {
+  def withTriggerTime(triggerTm: Long): LowBalanceAlert2Result = {
     triggerTime = triggerTm
     this
   }
@@ -299,8 +301,8 @@ class LowBalanceAlertResult2 extends ModelResultBase {
   }
 }
 
-class LowBalanceAlert2(mdlCtxt: ModelContext) extends ModelBase(mdlCtxt, LowBalanceAlert2) {
-  override def execute(emitAllResults: Boolean): ModelResultBase = {
+class LowBalanceAlert2(factory: ModelInstanceFactory) extends ModelInstance(factory) {
+  override def execute(txnCtxt: TransactionContext, outputDefault: Boolean): ModelResultBase = {
     // First check the preferences and decide whether to continue or not
     val gPref = GlobalPreferences.getRecentOrNew(Array("Type1"))
     val pref = CustPreferences.getRecentOrNew
@@ -339,7 +341,7 @@ class LowBalanceAlert2(mdlCtxt: ModelContext) extends ModelBase(mdlCtxt, LowBala
     val curTmInMs = curDtTmInMs.getDateTimeInMs
 
     // results
-    LowBalanceAlert2.CreateResultObject().asInstanceOf[LowBalanceAlertResult2].withCustId(rcntTxn.get.custid).withBranchId(rcntTxn.get.branchid).withAccNo(rcntTxn.get.accno).withCurBalance(rcntTxn.get.balance).withAlertType("lowBalanceAlert2").withTriggerTime(curTmInMs)
+    factory.createResultObject().asInstanceOf[LowBalanceAlert2Result].withCustId(rcntTxn.get.custid).withBranchId(rcntTxn.get.branchid).withAccNo(rcntTxn.get.accno).withCurBalance(rcntTxn.get.balance).withAlertType("lowBalanceAlert2").withTriggerTime(curTmInMs)
   }
 }
 

@@ -26,7 +26,7 @@ import org.apache.curator.framework.api._
 import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.curator.utils._
 import java.util.concurrent.locks._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import scala.util.control.Breaks._
 import org.scalatest.Assertions._
 
@@ -39,7 +39,7 @@ import com.ligadata.Exceptions.StackTrace
 
 class ZooKeeperListener {
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   var zkc: CuratorFramework = null
   var nodeCache: NodeCache = _
   var pathChildCache: PathChildrenCache = _
@@ -136,7 +136,7 @@ object ZooKeeperListenerTest {
   private type OptionMap = Map[Symbol, Any]
 
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   var firstTime = false
 
   private def CreatePathChildrenCache(client: CuratorFramework, zNodePath: String) = {

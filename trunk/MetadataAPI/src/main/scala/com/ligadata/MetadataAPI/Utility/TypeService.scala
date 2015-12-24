@@ -22,7 +22,7 @@ import com.ligadata.MetadataAPI.MetadataAPIImpl
 
 import scala.io.Source
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 /**
  * Created by dhaval on 8/12/15.
@@ -30,7 +30,7 @@ import org.apache.log4j._
 object TypeService {
   private val userid: Option[String] = Some("metadataapi")
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   def addType(input: String): String ={
     var response = ""

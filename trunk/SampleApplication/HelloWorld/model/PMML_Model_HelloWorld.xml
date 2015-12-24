@@ -27,6 +27,9 @@
         </DataField>
         <DataField dataType="string" displayName="name" name="name" optype="categorical"/>
         <DataField dataType="integer" displayName="predictedField" name="predictedField" optype="categorical"/>
+        <DataField name="NamespaceSearchPath" displayName="NamespaceSearchPath" dataType="container">
+            <Value value="Messages, com.ligadata.kamanja.samples.messages" property="valid"/>
+        </DataField>
     </DataDictionary>
     <TransformationDictionary>
         <DerivedField dataType="boolean" name="ScoreCheck" optype="categorical">

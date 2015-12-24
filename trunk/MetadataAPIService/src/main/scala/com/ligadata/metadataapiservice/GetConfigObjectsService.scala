@@ -30,7 +30,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.control._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.AuditAdapterInfo.AuditConstants
 
 object GetConfigObjectsService {
@@ -46,7 +46,7 @@ class GetConfigObjectsService(requestContext: RequestContext, userid:Option[Stri
   val log = Logging(system, getClass)
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
  // logger.setLevel(Level.TRACE);
 
   val APIName = "GetConfigObjects"

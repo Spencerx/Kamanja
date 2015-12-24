@@ -25,24 +25,24 @@ import org.apache.curator.framework.recipes.leader.LeaderLatchListener;
 import org.apache.zookeeper.WatchedEvent
 import org.apache.curator.RetryLoop
 import java.util.concurrent.Callable
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import scala.collection.JavaConverters._
 import org.apache.curator.framework.api.CuratorEventType._;
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 case class ClusterStatus(nodeId: String, isLeader: Boolean, leader: String, participants: Iterable[String])
 
 class ZkLeaderLatch(val zkcConnectString: String, val leaderPath: String, val nodeId: String, val EventChangeCallback: (ClusterStatus) => Unit, sessionTimeoutMs: Int = 1000, connectionTimeoutMs: Int = 30000) {
   private var curatorFramework: CuratorFramework = null
   private var leaderLatch: LeaderLatch = _
-  private val LOG = Logger.getLogger(getClass);
+  private val LOG = LogManager.getLogger(getClass);
   private var clstStatus: ClusterStatus = _
   private var isShuttingDown: Boolean = false
   private[this] val lock = new Object()
   
    val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   def SetIsShuttingDown(isIt: Boolean) = lock.synchronized {
     isShuttingDown = isIt
@@ -131,7 +131,7 @@ class ZkLeaderLatch(val zkcConnectString: String, val leaderPath: String, val no
 
 object ZkLeaderLatchTest {
   private type OptionMap = Map[Symbol, Any]
-  private val LOG = Logger.getLogger(getClass);
+  private val LOG = LogManager.getLogger(getClass);
 
   private def nextOption(map: OptionMap, list: List[String]): OptionMap = {
     def isSwitch(s: String) = (s(0) == '-')

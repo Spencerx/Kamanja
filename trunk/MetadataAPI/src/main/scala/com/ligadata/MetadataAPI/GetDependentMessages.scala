@@ -37,7 +37,7 @@ import com.ligadata.messagedef._
 import util.control.Breaks._
 
 import scala.xml.XML
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 
 class MsgContainers(var contMsgEntity: ContainerDef) {
@@ -57,11 +57,7 @@ object GetDependentMessages {
   private[this] val mdMgr = GetMdMgr
 
   lazy val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
-
-  def SetLoggerLevel(level: Level) {
-    logger.setLevel(level);
-  }
+  lazy val logger = LogManager.getLogger(loggerName)
 
   private def GetChildrenFromEntity(entity: EntityType, children: ArrayBuffer[(String, String)]): Unit = {
 

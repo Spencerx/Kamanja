@@ -19,7 +19,7 @@ package com.ligadata.udf.extract
 import scala.collection.mutable._
 import util.control.Breaks._
 import scala.util.matching.Regex
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
 import com.ligadata.kamanja.metadata._
 

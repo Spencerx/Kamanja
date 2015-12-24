@@ -28,7 +28,7 @@ import java.nio.file.{Files, Paths }
 import kafka.utils.VerifiableProperties
 import com.ligadata.Utils.KeyHasher
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object ProducerSimpleStats {
 
@@ -72,7 +72,7 @@ class  ExtractKey {
 
 class CustPartitioner(props: VerifiableProperties) extends Partitioner {
    val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   def partition(key: Any, a_numPartitions: Int): Int = {
 
     if (key == null) return 0
@@ -125,7 +125,7 @@ object SimpleKafkaProducer {
   val codec = if (compress) DefaultCompressionCodec.codec else NoCompressionCodec.codec
   
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   def send(producer: Producer[AnyRef, AnyRef], topic: String, message: String, partIdx: String): Unit = send(producer, topic, message.getBytes("UTF8"), partIdx.getBytes("UTF8"))
 

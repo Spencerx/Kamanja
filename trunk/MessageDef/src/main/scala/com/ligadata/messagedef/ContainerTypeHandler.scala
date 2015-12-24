@@ -23,16 +23,16 @@ import com.ligadata.kamanja.metadata.StructTypeDef
 import com.ligadata.kamanja.metadata.AttributeDef
 import com.ligadata.kamanja.metadata.MappedMsgTypeDef
 import scala.collection.mutable.ArrayBuffer
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 class ContainerTypeHandler {
 
   var methodGen = new ConstantMethodGenerator
     val logger = this.getClass.getName
-    lazy val log = Logger.getLogger(logger)
+    lazy val log = LogManager.getLogger(logger)
   def handleContainer(msg: Message, mdMgr: MdMgr, ftypeVersion: Long, f: Element, recompile: Boolean, childs: Map[String, Any]): (List[(String, String)], List[(String, String, String, String, Boolean, String)], Set[String], Array[String]) = {
     var scalaclass = new StringBuilder(8 * 1024)
     var assignCsvdata = new StringBuilder(8 * 1024)

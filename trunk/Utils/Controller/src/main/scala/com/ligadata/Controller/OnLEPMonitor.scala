@@ -23,7 +23,7 @@ import com.ligadata.InputAdapters.KafkaSimpleConsumer
 import com.ligadata.InputOutputAdapterInfo._
 import com.ligadata.ZooKeeper.{ ZooKeeperListener, CreateClient }
 import org.apache.curator.framework.CuratorFramework
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 import scala.io.Source
 import org.json4s.jackson.JsonMethods._
@@ -84,7 +84,7 @@ class ExecContextImpl(val input: InputAdapter, val curPartitionKey: PartitionUni
 }
 
 class KamanjaMonitor {
-  private val LOG = Logger.getLogger(getClass)
+  private val LOG = LogManager.getLogger(getClass)
   type OptionMap = Map[Symbol, Any]
   var isStarted: Boolean = false
   var zkNodeBasePath: String = null

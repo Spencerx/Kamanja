@@ -28,7 +28,7 @@ import com.ligadata.Serialize._
 import com.ligadata.kamanja.metadata._
 
 import scala.util.control._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -48,7 +48,7 @@ class GetAllObjectKeysService(requestContext: RequestContext, userid:Option[Stri
   val log = Logging(system, getClass)
   
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 //  logger.setLevel(Level.TRACE);
 
   val APIName = "GetAllObjectKeys"

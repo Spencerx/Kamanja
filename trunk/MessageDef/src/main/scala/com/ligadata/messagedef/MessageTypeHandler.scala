@@ -23,7 +23,7 @@ import com.ligadata.kamanja.metadata.StructTypeDef
 import com.ligadata.kamanja.metadata.AttributeDef
 import com.ligadata.Utils.Utils
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
 
 class MessageTypeHandler {
@@ -54,7 +54,7 @@ class MessageTypeHandler {
     var mappedPrevTypNotrMatchkeys = new StringBuilder(8 * 1024)
     var fixedMsgGetKeyStrBuf = new StringBuilder(8 * 1024)
       val logger = this.getClass.getName
-      lazy val log = Logger.getLogger(logger)
+      lazy val log = LogManager.getLogger(logger)
     try {
 
       var msgDef: MessageDef = mdMgr.Message(f.Ttype, ftypeVersion, true).getOrElse(null)

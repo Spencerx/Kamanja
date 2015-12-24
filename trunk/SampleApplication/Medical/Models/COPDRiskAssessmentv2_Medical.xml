@@ -35,6 +35,11 @@ COPDv2.xml
 		<DataField name="COPDSeverity" displayName="COPDSeverity" optype="categorical" dataType="string"/>
 		<DataField name="Msg_Desynpuf_Id" displayName="Msg_Desynpuf_Id" optype="categorical" dataType="string"/>
 
+		<DataField name="NamespaceSearchPath" displayName="NamespaceSearchPath" dataType="container">
+			<Value value="Messages, com.ligadata.kamanja.samples.messages" property="valid"/>
+			<Value value="Containers, com.ligadata.kamanja.samples.containers" property="valid"/>
+		</DataField>
+
 		<!-- Not used -->
 		<DataField name="Inp_Clm_Thru_Dt" displayName="Inp_Clm_Thru_Dt" optype="categorical" dataType="integer"/>
 		<DataField name="Outp_Clm_Thru_Dt" displayName="Outp_Clm_Thru_Dt" optype="categorical" dataType="integer"/>
@@ -56,7 +61,7 @@ COPDv2.xml
 		<DerivedField name="SputumMessageContainerBases" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetArray">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">system.SputumCodes</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.containers.SputumCodes</Constant>
 			</Apply>
 		</DerivedField>
 
@@ -76,7 +81,7 @@ COPDv2.xml
 		<DerivedField name="SmokingMessageContainerBases" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetArray">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">system.SmokeCodes</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.containers.SmokeCodes</Constant>
 			</Apply>
 		</DerivedField>
 
@@ -96,7 +101,7 @@ COPDv2.xml
 		<DerivedField name="EnvExposureMessageContainerBases" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetArray">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">system.EnvCodes</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.containers.EnvCodes</Constant>
 			</Apply>
 		</DerivedField>
 
@@ -116,7 +121,7 @@ COPDv2.xml
 		<DerivedField name="CoughMessageContainerBases" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetArray">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">system.CoughCodes</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.containers.CoughCodes</Constant>
 			</Apply>
 		</DerivedField>
 
@@ -136,7 +141,7 @@ COPDv2.xml
 		<DerivedField name="DyspnoeaMessageContainerBases" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetArray">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">system.DyspnoeaCodes</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.containers.DyspnoeaCodes</Constant>
 			</Apply>
 		</DerivedField>
 
@@ -255,7 +260,7 @@ COPDv2.xml
 		<DerivedField name="desynpuf_id_base_hl7s" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetHistory">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">System.HL7</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.messages.HL7</Constant>
 	 			<FieldRef field="Cur_desynpuf_id_list"/> 
 				<Constant dataType="boolean">true</Constant> 
 			</Apply>
@@ -332,7 +337,7 @@ COPDv2.xml
 		<DerivedField name="desynpuf_id_base_inpatient_claims" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetHistory">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">System.InpatientClaim</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.messages.InpatientClaim</Constant>
 	 			<FieldRef field="Cur_desynpuf_id_list"/> 
 				<Constant dataType="boolean">true</Constant> 
 			</Apply>
@@ -368,7 +373,7 @@ COPDv2.xml
 		<DerivedField name="desynpuf_id_base_outpatient_claims" dataType="ArrayOfMessageContainerBase" optype="categorical">
 			<Apply function="GetHistory">
 				<Constant dataType="context">ctx</Constant>
-			    <Constant dataType="string">System.OutpatientClaim</Constant>
+			    <Constant dataType="string">com.ligadata.kamanja.samples.messages.OutpatientClaim</Constant>
 	 			<FieldRef field="Cur_desynpuf_id_list"/> 
 				<Constant dataType="boolean">true</Constant> 
 			</Apply>

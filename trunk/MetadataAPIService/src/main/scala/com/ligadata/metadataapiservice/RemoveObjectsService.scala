@@ -28,7 +28,7 @@ import com.ligadata.Serialize._
 import com.ligadata.kamanja.metadata._
 import scala.util.control._
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.AuditAdapterInfo.AuditConstants
 
 object RemoveObjectsService {
@@ -44,7 +44,7 @@ class RemoveObjectsService(requestContext: RequestContext, userid: Option[String
   val log = Logging(system, getClass)
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   //logger.setLevel(Level.TRACE);
 
   val APIName = "RemoveObjects"

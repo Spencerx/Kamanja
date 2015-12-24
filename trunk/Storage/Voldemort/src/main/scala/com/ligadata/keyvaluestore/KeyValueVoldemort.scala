@@ -24,7 +24,7 @@ import voldemort.client.ClientConfig
 import voldemort.client.SocketStoreClientFactory
 import voldemort.client.StoreClient
 import voldemort.versioning.Versioned;
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.Exceptions._
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -62,7 +62,7 @@ class KeyValueVoldemortTx(val parent: DataStore) extends Transaction {
 class KeyValueVoldemort(val kvManagerLoader: KamanjaLoaderInfo, val datastoreConfig: String, val tableName: String) extends DataStore {
   val adapterConfig = if (datastoreConfig != null) datastoreConfig.trim else ""
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   if (adapterConfig.size == 0) {
     throw new Exception("Not found valid Voldemort Configuration.")

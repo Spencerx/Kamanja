@@ -29,7 +29,7 @@ import com.ligadata.kamanja.metadata._
 import com.ligadata.AuditAdapterInfo.AuditConstants
 import scala.util.control._
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object ActivateObjectsService {
 	case class Process(apiArgListJson: String)
@@ -45,7 +45,7 @@ class ActivateObjectsService(requestContext: RequestContext, userid:Option[Strin
   
   
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
  // logger.setLevel(Level.TRACE);
 
   val APIName = "ActivateObjects"

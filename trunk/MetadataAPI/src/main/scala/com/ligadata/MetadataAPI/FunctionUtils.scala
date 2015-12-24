@@ -52,7 +52,7 @@ import com.ligadata.messagedef._
 import com.ligadata.Exceptions._
 
 import scala.xml.XML
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -65,7 +65,6 @@ import org.apache.zookeeper.CreateMode
 import com.ligadata.keyvaluestore._
 import com.ligadata.Serialize._
 import com.ligadata.Utils._
-import util.control.Breaks._
 import com.ligadata.AuditAdapterInfo._
 import com.ligadata.SecurityAdapterInfo.SecurityAdapter
 import com.ligadata.keyvaluestore.KeyValueManager
@@ -80,7 +79,7 @@ object FunctionUtils {
   lazy val sysNS = "System"
   // system name space
   lazy val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   lazy val serializer = SerializerManager.GetSerializer("kryo")
   
   def AddFunction(functionDef: FunctionDef): String = {

@@ -16,11 +16,12 @@
 
 package com.ligadata.MetadataAPI
 import com.ligadata.Exceptions.InternalErrorException
+import com.ligadata.Serialize.JsonSerializer
 import org.apache.zookeeper.KeeperException.NoNodeException
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import scala.collection.JavaConverters._
 import org.apache.curator.framework.recipes.cache._
 import scala.actors.threadpool.{ Executors, ExecutorService }
@@ -33,7 +34,7 @@ import scala.actors.threadpool.{ Executors, ExecutorService }
 object MonitorAPIImpl {
   
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   val CHILD_ADDED_ACTION = "CHILD_ADDED"
   val CHILD_REMOVED_ACTION = "CHILD_REMOVED"
   val CHILD_UPDATED_ACTION = "CHILD_UPDATED"
@@ -65,13 +66,16 @@ object MonitorAPIImpl {
       var nodeName = pathTokens(pathTokens.length - 1)
     
       // Add or Remove the data to/from the map.
-      if (eventType.equals(CHILD_ADDED_ACTION) || eventType.equals(CHILD_UPDATED_ACTION)) 
-        healthInfo(nodeName) = new String(eventPathData)
+      if (eventType.equals(CHILD_ADDED_ACTION) || eventType.equals(CHILD_UPDATED_ACTION)) {
+        var temp = new String(eventPathData)
+        var tempMap = parse(temp).values
+        healthInfo(nodeName) = tempMap
+      }
       else 
         if (healthInfo.contains(nodeName)) healthInfo.remove(nodeName)
     } catch {
       case e: Exception => {
-        e.printStackTrace
+        logger.warn("Exception in hearbeat ",e)
       }
     }  
   }
@@ -81,17 +85,17 @@ object MonitorAPIImpl {
    *                    by Kamanja Engine instances.
    * @return - String
    */
-   def getHeartbeatInfo(ids: List[String]) :String = {
+   def getHeartbeatInfo(ids: List[String]) : String = {
      var ar = healthInfo.values.toArray
      var isFirst = true
      var resultJson = "["
-     // If List is empty, then return everything. otherwise, return only those items that are present int he
+       // If List is empty, then return everything. otherwise, return only those items that are present int he
      // list    
      if (ids.length > 0) {
        ids.foreach (id => {
          if (healthInfo.contains(id)) {
-           if (!isFirst) resultJson = resultJson + ","
-           resultJson = resultJson +  healthInfo(id).asInstanceOf[String]
+           if (!isFirst) resultJson + ","
+           resultJson +=  JsonSerializer.SerializeMapToJsonString(healthInfo(id).asInstanceOf[Map[String,Any]])
            isFirst = false
          }
        })
@@ -99,13 +103,12 @@ object MonitorAPIImpl {
        if (healthInfo != null && ar.length > 0) {
          for(i <- 0 until ar.length ) {
            if (!isFirst) resultJson = resultJson + ","
-           resultJson = resultJson + ar(i).asInstanceOf[String]
+           resultJson += JsonSerializer.SerializeMapToJsonString(ar(i).asInstanceOf[Map[String,Any]])
            isFirst = false
          }
        }      
      }
-     return resultJson + "]"
-     
+    return resultJson + "]"
    }
    
    /**
@@ -127,5 +130,4 @@ object MonitorAPIImpl {
     * shutdownMonitor - Shutdown the Monitor Heartbeat
     */
   def shutdownMonitor: Unit = {_exec.shutdown}
-   
 }

@@ -17,7 +17,7 @@
 package com.ligadata.OutputAdapters
 
 import java.util.Properties
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.InputOutputAdapterInfo.{ AdapterConfiguration, OutputAdapter, OutputAdapterObj, CountersAdapter }
 import com.ligadata.AdaptersConfiguration.IbmMqAdapterConfiguration
 import javax.jms.{ Connection, Destination, JMSException, Message, MessageProducer, Session, TextMessage, BytesMessage }
@@ -33,7 +33,7 @@ object IbmMqProducer extends OutputAdapterObj {
 }
 
 class IbmMqProducer(val inputConfig: AdapterConfiguration, cntrAdapter: CountersAdapter) extends OutputAdapter {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
 
   //BUGBUG:: Not Checking whether inputConfig is really QueueAdapterConfiguration or not. 
   private[this] val qc = IbmMqAdapterConfiguration.GetAdapterConfig(inputConfig)

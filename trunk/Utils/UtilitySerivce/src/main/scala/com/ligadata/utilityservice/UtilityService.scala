@@ -10,7 +10,7 @@ import spray.routing._
 import spray.http._
 
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import scala.util.control.Breaks._
 import com.ligadata.Exceptions._
 import com.ligadata.Exceptions.StackTrace
@@ -35,7 +35,7 @@ class UtilityService extends Runnable {
   private type OptionMap = Map[Symbol, Any]
   
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   
   var inArgs: Array[String] = null
   def this(args: Array[String]) = {

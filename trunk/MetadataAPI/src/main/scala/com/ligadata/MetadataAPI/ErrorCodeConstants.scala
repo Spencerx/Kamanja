@@ -213,4 +213,6 @@ object ErrorCodeConstants {
    
    //Monitor
    val GetHeartbeat_Success = "Heartbeats fetched successfully"
+   val GetHeartbeat_Failed = "Get Heartbeats Failed"
+
 }

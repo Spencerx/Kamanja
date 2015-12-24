@@ -4,7 +4,7 @@ import java.io.{IOException, File, PrintWriter}
 import java.nio.file.{Path, FileSystems}
 
 import com.ligadata.Exceptions.{InternalErrorException, MissingArgumentException}
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 /**
  * Created by danielkozin on 9/24/15.
@@ -15,7 +15,7 @@ class DirectoryListener {
 
 object LocationWatcher {
   lazy val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   def main (args: Array[String]) : Unit = {
 
       if (args.size == 0 || args.size > 1) {

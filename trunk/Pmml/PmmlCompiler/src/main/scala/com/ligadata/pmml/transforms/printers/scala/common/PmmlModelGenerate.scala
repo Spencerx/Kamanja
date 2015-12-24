@@ -16,7 +16,7 @@
 
 package com.ligadata.pmml.transforms.printers.scala.common
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.pmml.compiler._
 import com.ligadata.pmml.support._
 import com.ligadata.pmml.traits._

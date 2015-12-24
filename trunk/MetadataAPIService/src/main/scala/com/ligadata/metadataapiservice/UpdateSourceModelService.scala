@@ -27,7 +27,7 @@ import com.ligadata.MetadataAPI._
 import com.ligadata.kamanja.metadata._
 import com.ligadata.AuditAdapterInfo.AuditConstants
 import scala.util.control._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object UpdateSourceModelService {
   case class UpdateJava(sourceCode:String)
@@ -45,7 +45,7 @@ class UpdateSourceModelService(requestContext: RequestContext, userid:Option[Str
   val APIName = "UpdateSourceModelService"
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   def receive = {
     case UpdateJava(sourceCode) => {

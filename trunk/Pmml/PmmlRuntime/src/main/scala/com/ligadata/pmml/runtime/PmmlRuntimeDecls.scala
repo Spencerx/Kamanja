@@ -22,12 +22,12 @@ import org.joda.time._
 import org.joda.time.format._
 import com.ligadata.kamanja.metadata._
 import com.ligadata.KamanjaBase._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
 
 object RuntimeGlobalLogger {
     val loggerName = this.getClass.getName()
-    val logger = Logger.getLogger(loggerName)
+    val logger = LogManager.getLogger(loggerName)
 }
 
 trait LogTrait {

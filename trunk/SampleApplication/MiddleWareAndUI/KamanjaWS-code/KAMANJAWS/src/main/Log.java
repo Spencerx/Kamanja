@@ -28,13 +28,13 @@ import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
 
-import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.DailyRollingFileAppender;
-import org.apache.log4j.FileAppender;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PatternLayout;
-import org.apache.log4j.SimpleLayout;
+import org.apache.logging.log4j.ConsoleAppender;
+import org.apache.logging.log4j.DailyRollingFileAppender;
+import org.apache.logging.log4j.FileAppender;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.{ Logger, LogManager };
+import org.apache.logging.log4j.PatternLayout;
+import org.apache.logging.log4j.SimpleLayout;
 import org.joda.time.DateTime;
 
 //@SuppressWarnings("unused")
@@ -53,10 +53,10 @@ public class Log {
 		StringBuilder logBuffer = CurrentLog(methodName, request);
 		userState.LogBuffer = logBuffer;
 
-		logger = Logger.getLogger(Log.class);
+		logger = LogManager.getLogger(Log.class);
 		
-		//metaDBQueriesLogger = Logger.getLogger("meta.sql.Log");
-		//mainDBQueriesLogger = Logger.getLogger("main.sql.Log");
+		//metaDBQueriesLogger = LogManager.getLogger("meta.sql.Log");
+		//mainDBQueriesLogger = LogManager.getLogger("main.sql.Log");
 		try 
 		{
 			System.out.println("Application log dir: " + Global.CONFIG_LOG_FILE_PATH);
@@ -80,7 +80,7 @@ public class Log {
 
 	private void setupDBLoggers() throws IOException
 	{
-		org.apache.log4j.Layout layout = new PatternLayout("%m%n");
+		org.apache.logging.log4j.Layout layout = new PatternLayout("%m%n");
 		
 		/*DailyRollingFileAppender metaDBfa = new DailyRollingFileAppender(new SimpleLayout(), Global.CONFIG_LOG_FILE_PATH + ".meta.sql", Global.CONFIG_LOG_FILE_PATTERN);
 		metaDBfa.activateOptions();
@@ -109,10 +109,10 @@ public class Log {
 		final String fileName = Global.CONFIG_LOG_FILE_PATH + "_user_security";
 		final PatternLayout layout = new PatternLayout("%d{ISO8601} [%t] %-5p %c %x - %m%n");
 		final List<Logger> loggers = new ArrayList<Logger>();
-		loggers.add(Logger.getLogger("com.npario.user"));
-		loggers.add(Logger.getLogger("com.npario.user.security"));
-		loggers.add(Logger.getLogger("com.npario.user.security.custom"));
-		loggers.add(Logger.getLogger("com.npario.datalayer"));
+		loggers.add(LogManager.getLogger("com.npario.user"));
+		loggers.add(LogManager.getLogger("com.npario.user.security"));
+		loggers.add(LogManager.getLogger("com.npario.user.security.custom"));
+		loggers.add(LogManager.getLogger("com.npario.datalayer"));
 
 		ConsoleAppender console = new ConsoleAppender(); // create appender
 		// configure the appender

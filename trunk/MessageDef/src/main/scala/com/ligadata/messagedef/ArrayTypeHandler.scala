@@ -18,9 +18,9 @@ package com.ligadata.messagedef
 
 import com.ligadata.kamanja.metadata._
 import scala.collection.mutable.ArrayBuffer
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 class ArrayTypeHandler {
 
@@ -30,10 +30,10 @@ class ArrayTypeHandler {
   private val pad4 = "\t\t\t\t"
   private val newline = "\n"
   val logger = this.getClass.getName
-  lazy val log = Logger.getLogger(logger)
+  lazy val log = LogManager.getLogger(logger)
   var cnstObjVar = new ConstantMsgObjVarGenerator
   var methodGen = new ConstantMethodGenerator
-  private val LOG = Logger.getLogger(getClass)
+  private val LOG = LogManager.getLogger(getClass)
 
   def handleArrayType(keysSet: Set[String], typ: Option[com.ligadata.kamanja.metadata.BaseTypeDef], f: Element, msg: Message, childs: Map[String, Any], prevVerMsgBaseTypesIdxArry: ArrayBuffer[String], recompile: Boolean): (List[(String, String)], List[(String, String, String, String, Boolean, String)], Set[String], Array[String]) = {
     var scalaclass = new StringBuilder(8 * 1024)
@@ -74,7 +74,7 @@ class ArrayTypeHandler {
 
       if (arrayType == null) throw new Exception("Array type " + f.Ttype + " do not exist")
 
-      if ((arrayType.elemDef.physicalName.equals("String")) || (arrayType.elemDef.physicalName.equals("Int")) || (arrayType.elemDef.physicalName.equals("Float")) || (arrayType.elemDef.physicalName.equals("Double")) || (arrayType.elemDef.physicalName.equals("Char"))) {
+      if ((arrayType.elemDef.physicalName.equals("String")) || (arrayType.elemDef.physicalName.equals("Int")) || (arrayType.elemDef.physicalName.equals("Float")) || (arrayType.elemDef.physicalName.equals("Double")) || (arrayType.elemDef.physicalName.equals("Char")) || (arrayType.elemDef.physicalName.equals("Long")) || (arrayType.elemDef.physicalName.equals("Boolean"))) {
         if (arrayType.elemDef.implementationName.isEmpty())
           throw new Exception("Implementation Name not found in metadata for namespace %s" + f.Ttype)
         else
@@ -249,7 +249,7 @@ class ArrayTypeHandler {
       arrayBufType = typ.get.asInstanceOf[ArrayBufTypeDef]
       if (arrayBufType == null) throw new Exception("Array Byffer of " + f.Ttype + " do not exists throwing Null Pointer")
 
-      if ((arrayBufType.elemDef.physicalName.equals("String")) || (arrayBufType.elemDef.physicalName.equals("Int")) || (arrayBufType.elemDef.physicalName.equals("Float")) || (arrayBufType.elemDef.physicalName.equals("Double")) || (arrayBufType.elemDef.physicalName.equals("Char"))) {
+      if ((arrayBufType.elemDef.physicalName.equals("String")) || (arrayBufType.elemDef.physicalName.equals("Int")) || (arrayBufType.elemDef.physicalName.equals("Float")) || (arrayBufType.elemDef.physicalName.equals("Double")) || (arrayBufType.elemDef.physicalName.equals("Char")) || (arrayBufType.elemDef.physicalName.equals("Long")) || (arrayBufType.elemDef.physicalName.equals("Boolean"))) {
         if (arrayBufType.elemDef.implementationName.isEmpty())
           throw new Exception("Implementation Name not found in metadata for namespace %s" + f.Ttype)
         else

@@ -14,35 +14,18 @@
  * limitations under the License.
  */
 
-package com.ligadata.kamanja.financial;
+package com.ligadata.kamanja.samples.models;
 
 import com.google.common.base.Optional;
 import com.ligadata.KamanjaBase.*;
-import System.*;
+import com.ligadata.kamanja.metadata.ModelDef;
 
-public class HelloWorldModel extends ModelBase {
-	static HelloWorldModelObj objSingleton = new HelloWorldModelObj();
-	ModelContext mdlCntxt;
-
-	public HelloWorldModel(ModelContext mdlContext) {
-    	super(mdlContext, objSingleton);
-    	mdlCntxt = mdlContext;
+public class HelloWorldModel extends ModelInstance {
+	public HelloWorldModel(ModelInstanceFactory factory) {
+    	super(factory);
     }
 
-
-	@Override
-	public ModelBaseObj factory() {
-		// TODO Auto-generated method stub
-		return objSingleton;
-	}
-
-	@Override
-	public ModelContext modelContext() {
-		// TODO Auto-generated method stub
-		return mdlCntxt;
-	}
-
-	public ModelResultBase execute(boolean emitAllResults) {
+	public ModelResultBase execute(TransactionContext txnCtxt, boolean outputDefault) {
     	/*
 		System.out.println("inside model");
     	GlobalPreferences gPref = GlobalPreferencesFactory.rddObject.getRecentOrNew(new String[]{"PrefType"});  //(new String[]{"Type1"});
@@ -69,12 +52,12 @@ public class HelloWorldModel extends ModelBase {
     		return null;
     	}
 
-    	TransactionMsg rcntTxn = (TransactionMsg) this.mdlCntxt.msg();
+    	TransactionMsg rcntTxn = (TransactionMsg) txnCtxt.getMessage();
 
     	 if (rcntTxn.balance() >= gPref.minalertbalance())
     	      return null;
 		*/
-		msg1 helloWorld = (msg1) this.mdlCntxt.msg();
+		msg1 helloWorld = (msg1) txnCtxt.getMessage();
 		if(helloWorld.score()!=1)
 			return null;
 
@@ -89,24 +72,27 @@ public class HelloWorldModel extends ModelBase {
 
 
 
-    public static class HelloWorldModelObj implements ModelBaseObj {
-		public boolean IsValidMessage(MessageContainerBase msg) {
+    public static class HelloWorldModelFactory extends ModelInstanceFactory {
+		public HelloWorldModelFactory(ModelDef modelDef, NodeContext nodeContext) {
+			super(modelDef, nodeContext);
+		}
+		public boolean isValidMessage(MessageContainerBase msg) {
 			return (msg instanceof msg1);
 		}
 
-		public ModelBase CreateNewModel(ModelContext mdlContext) {
-			return new HelloWorldModel(mdlContext);
+		public ModelInstance createModelInstance() {
+			return new HelloWorldModel(this);
 		}
 
-		public String ModelName() {
+		public String getModelName() {
 			return "HelloWorldModel";
 		}
 
-		public String Version() {
+		public String getVersion() {
 			return "0.0.1";
 		}
 
-		public ModelResultBase CreateResultObject() {
+		public ModelResultBase createResultObject() {
 			return new MappedModelResults();
 		}
 	}

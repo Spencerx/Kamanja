@@ -20,9 +20,9 @@ import scala.collection.immutable.Map
 import scala.collection.mutable._
 import scala.util.control.Breaks._
 import scala.reflect.runtime.{ universe => ru }
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.KvBase.{ Key, Value, TimeRange, KvBaseDefalts, KeyWithBucketIdAndPrimaryKey, KeyWithBucketIdAndPrimaryKeyCompHelper, LoadKeyWithBucketId }
-import com.ligadata.StorageBase.{ DataStore, Transaction }
+import com.ligadata.StorageBase.{ DataStore, Transaction, DataStoreOperations }
 import com.ligadata.KamanjaBase._
 // import com.ligadata.KamanjaBase.{ EnvContext, MessageContainerBase }
 import com.ligadata.kamanja.metadata._
@@ -32,16 +32,17 @@ import com.ligadata.Serialize._
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-import com.ligadata.Exceptions.StackTrace
+import com.ligadata.Exceptions._
 import com.ligadata.keyvaluestore.KeyValueManager
 import java.io.{ ByteArrayInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream }
 import java.util.{ TreeMap, Date };
 // import collection._
 // import JavaConverters._
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 trait LogTrait {
   val loggerName = this.getClass.getName()
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 }
 
 // case class AdapterUniqueValueDes(T: Long, V: String, Qs: Option[List[String]], Ks: Option[List[String]], Res: Option[List[String]]) // TransactionId, Value, Queues & Result Strings. Queues and Result Strings should be same size.  
@@ -52,8 +53,31 @@ case class AdapterUniqueValueDes(T: Long, V: String, Out: Option[List[List[Strin
  *  The SimpleEnvContextImpl supports kv stores that are based upon MapDb hash tables.
  */
 object SimpleEnvContextImpl extends EnvContext with LogTrait {
+  private def ResolveEnableEachTransactionCommit: Unit = {
+    if (_mgr != null) {
+      var foundIt = false
+      val clusters = _mgr.Clusters
+      clusters.foreach(c => {
+        if (foundIt == false) {
+          val tmp1 = _mgr.GetUserProperty(c._1, "EnableEachTransactionCommit")
+          if (tmp1 != null && tmp1.trim().size > 0) {
+            try {
+              _enableEachTransactionCommit = tmp1.trim().toBoolean
+              foundIt = true
+            } catch {
+              case e: Exception => {
+              }
+            }
+          }
+        }
+      })
+    }
+  }
 
-  override def setMdMgr(inMgr: MdMgr): Unit = { _mgr = inMgr }
+  override def setMdMgr(inMgr: MdMgr): Unit = {
+    _mgr = inMgr
+    ResolveEnableEachTransactionCommit
+  }
 
   override def NewMessageOrContainer(fqclassname: String): MessageContainerBase = {
     try {
@@ -73,103 +97,129 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     var key: String = _
   }
 
-  class MsgContainerInfo {
+  class MsgContainerInfo(createLock: Boolean) {
     var loadedKeys = new java.util.TreeSet[LoadKeyWithBucketId](KvBaseDefalts.defaultLoadKeyComp) // By BucketId, BucketKey, Time Range
     //  val current_msg_cont_data = ArrayBuffer[MessageContainerBase]()
     val dataByTmPart = new TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag](KvBaseDefalts.defualtTimePartComp) // By time, BucketKey, then PrimaryKey/{transactionid & rowid}. This is little cheaper if we are going to get exact match, because we compare time & then bucketid
     val dataByBucketKey = new TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag](KvBaseDefalts.defualtBucketKeyComp) // By BucketKey, time, then PrimaryKey/{Transactionid & Rowid}
-    var containerType: BaseTypeDef = null
     var isContainer: Boolean = false
-    var objFullName: String = ""
-    var dataStore: DataStore = null
+    val reent_lock: ReentrantReadWriteLock = if (createLock) new ReentrantReadWriteLock(true) else null
   }
 
   object TxnContextCommonFunctions {
+    def ReadLockContainer(container: MsgContainerInfo): Unit = {
+      if (container != null && container.reent_lock != null)
+        container.reent_lock.readLock().lock()
+    }
+
+    def ReadUnlockContainer(container: MsgContainerInfo): Unit = {
+      if (container != null && container.reent_lock != null)
+        container.reent_lock.readLock().unlock()
+    }
+
+    def WriteLockContainer(container: MsgContainerInfo): Unit = {
+      if (container != null && container.reent_lock != null)
+        container.reent_lock.writeLock().lock()
+    }
+
+    def WriteUnlockContainer(container: MsgContainerInfo): Unit = {
+      if (container != null && container.reent_lock != null)
+        container.reent_lock.writeLock().unlock()
+    }
+
     //BUGBUG:: we are handling primaryKey only when partKey
     def getRecent(container: MsgContainerInfo, partKey: List[String], tmRange: TimeRange, primaryKey: List[String], f: MessageContainerBase => Boolean): (MessageContainerBase, Boolean) = {
       //BUGBUG:: Taking last record from the search. it may not be the most recent
       if (container != null) {
-        if (TxnContextCommonFunctions.IsEmptyKey(partKey) == false) {
-          val tmRng =
-            if (tmRange == null)
-              TimeRange(Long.MinValue, Long.MaxValue)
-            else
-              tmRange
-          val partKeyAsArray = partKey.toArray
-          val primKeyAsArray = if (primaryKey != null && primaryKey.size > 0) primaryKey.toArray else null
-          val fromKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.beginTime, partKeyAsArray, 0, 0), primKeyAsArray != null, primKeyAsArray)
-          val toKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.endTime, partKeyAsArray, Long.MaxValue, Int.MaxValue), primKeyAsArray != null, primKeyAsArray)
-          val tmpDataByTmPart = new TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag](KvBaseDefalts.defualtTimePartComp) // By time, BucketKey, then PrimaryKey/{transactionid & rowid}. This is little cheaper if we are going to get exact match, because we compare time & then bucketid
-          tmpDataByTmPart.putAll(container.dataByBucketKey.subMap(fromKey, true, toKey, true))
-          val tmFilterMap = tmpDataByTmPart.subMap(fromKey, true, toKey, true)
+        TxnContextCommonFunctions.ReadLockContainer(container)
+        try {
+          if (TxnContextCommonFunctions.IsEmptyKey(partKey) == false) {
+            val tmRng =
+              if (tmRange == null)
+                TimeRange(Long.MinValue, Long.MaxValue)
+              else
+                tmRange
+            val partKeyAsArray = partKey.toArray
+            val primKeyAsArray = if (primaryKey != null && primaryKey.size > 0) primaryKey.toArray else null
+            val fromKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.beginTime, partKeyAsArray, 0, 0), primKeyAsArray != null, primKeyAsArray)
+            val toKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.endTime, partKeyAsArray, Long.MaxValue, Int.MaxValue), primKeyAsArray != null, primKeyAsArray)
+            val tmpDataByTmPart = new TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag](KvBaseDefalts.defualtTimePartComp) // By time, BucketKey, then PrimaryKey/{transactionid & rowid}. This is little cheaper if we are going to get exact match, because we compare time & then bucketid
+            tmpDataByTmPart.putAll(container.dataByBucketKey.subMap(fromKey, true, toKey, true))
+            val tmFilterMap = tmpDataByTmPart.subMap(fromKey, true, toKey, true)
 
-          if (f != null) {
-            var it1 = tmFilterMap.descendingMap().entrySet().iterator()
-            while (it1.hasNext()) {
-              val entry = it1.next();
-              val value = entry.getValue();
-              if (primKeyAsArray != null) {
-                if (primKeyAsArray.sameElements(value.value.PrimaryKeyData) && f(value.value)) {
-                  return (value.value, true);
-                }
-              } else {
-                if (f(value.value)) {
-                  return (value.value, true);
-                }
-              }
-            }
-          } else {
-            if (primKeyAsArray != null) {
+            if (f != null) {
               var it1 = tmFilterMap.descendingMap().entrySet().iterator()
               while (it1.hasNext()) {
                 val entry = it1.next();
                 val value = entry.getValue();
-                if (primKeyAsArray.sameElements(value.value.PrimaryKeyData))
+                if (primKeyAsArray != null) {
+                  if (primKeyAsArray.sameElements(value.value.PrimaryKeyData) && f(value.value)) {
+                    return (value.value, true);
+                  }
+                } else {
+                  if (f(value.value)) {
+                    return (value.value, true);
+                  }
+                }
+              }
+            } else {
+              if (primKeyAsArray != null) {
+                var it1 = tmFilterMap.descendingMap().entrySet().iterator()
+                while (it1.hasNext()) {
+                  val entry = it1.next();
+                  val value = entry.getValue();
+                  if (primKeyAsArray.sameElements(value.value.PrimaryKeyData))
+                    return (value.value, true);
+                }
+              } else {
+                val data = tmFilterMap.lastEntry()
+                if (data != null)
+                  return (data.getValue().value, true)
+              }
+            }
+          } else if (tmRange != null) {
+            val fromKey = KeyWithBucketIdAndPrimaryKey(Int.MinValue, Key(tmRange.beginTime, null, 0, 0), false, null)
+            val toKey = KeyWithBucketIdAndPrimaryKey(Int.MaxValue, Key(tmRange.endTime, null, Long.MaxValue, Int.MaxValue), false, null)
+            val tmFilterMap = container.dataByTmPart.subMap(fromKey, true, toKey, true)
+
+            if (f != null) {
+              var it1 = tmFilterMap.descendingMap().entrySet().iterator()
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                val value = entry.getValue();
+                if (f(value.value)) {
                   return (value.value, true);
+                }
               }
             } else {
               val data = tmFilterMap.lastEntry()
               if (data != null)
                 return (data.getValue().value, true)
             }
-          }
-        } else if (tmRange != null) {
-          val fromKey = KeyWithBucketIdAndPrimaryKey(Int.MinValue, Key(tmRange.beginTime, null, 0, 0), false, null)
-          val toKey = KeyWithBucketIdAndPrimaryKey(Int.MaxValue, Key(tmRange.endTime, null, Long.MaxValue, Int.MaxValue), false, null)
-          val tmFilterMap = container.dataByTmPart.subMap(fromKey, true, toKey, true)
-
-          if (f != null) {
-            var it1 = tmFilterMap.descendingMap().entrySet().iterator()
-            while (it1.hasNext()) {
-              val entry = it1.next();
-              val value = entry.getValue();
-              if (f(value.value)) {
-                return (value.value, true);
-              }
-            }
           } else {
-            val data = tmFilterMap.lastEntry()
+            val data = container.dataByTmPart.lastEntry()
             if (data != null)
               return (data.getValue().value, true)
           }
-        } else {
-          val data = container.dataByTmPart.lastEntry()
-          if (data != null)
-            return (data.getValue().value, true)
+        } catch {
+          case e: Exception => {
+            throw e
+          }
+        } finally {
+          TxnContextCommonFunctions.ReadUnlockContainer(container)
         }
       }
       (null, false)
     }
 
     def IsEmptyKey(key: List[String]): Boolean = {
-      (key == null || key.size == 0 /* || key.filter(k => k != null).size == 0 */)
+      (key == null || key.size == 0 /* || key.filter(k => k != null).size == 0 */ )
     }
 
     def IsEmptyKey(key: Array[String]): Boolean = {
-      (key == null || key.size == 0 /* || key.filter(k => k != null).size == 0 */)
+      (key == null || key.size == 0 /* || key.filter(k => k != null).size == 0 */ )
     }
 
-    /*
     def IsSameKey(key1: List[String], key2: List[String]): Boolean = {
       if (key1.size != key2.size)
         return false
@@ -182,84 +232,102 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       return true
     }
 
-    def IsKeyExists(keys: Array[List[String]], searchKey: List[String]): Boolean = {
-      keys.foreach(k => {
-        if (IsSameKey(k, searchKey))
-          return true
-      })
-      return false
+    def IsSameKey(key1: Array[String], key2: Array[String]): Boolean = {
+      if (key1.size != key2.size)
+        return false
+
+      for (i <- 0 until key1.size) {
+        if (key1(i).compareTo(key2(i)) != 0)
+          return false
+      }
+
+      return true
     }
-*/
 
-    def getRddData(container: MsgContainerInfo, partKey: List[String], tmRange: TimeRange, primaryKey: List[String], f: MessageContainerBase => Boolean, alreadyFoundPartKeys: Array[Key]): (Array[MessageContainerBase], Array[Key]) = {
-      val retResult = ArrayBuffer[MessageContainerBase]()
-      var foundPartKeys = ArrayBuffer[Key]()
+    def getRddData(container: MsgContainerInfo, partKey: List[String], tmRange: TimeRange, primaryKey: List[String], f: MessageContainerBase => Boolean): Array[(KeyWithBucketIdAndPrimaryKey, MessageContainerBase)] = {
+      val retResult = ArrayBuffer[(KeyWithBucketIdAndPrimaryKey, MessageContainerBase)]()
       if (container != null) {
-        if (TxnContextCommonFunctions.IsEmptyKey(partKey) == false) {
-          val tmRng =
-            if (tmRange == null)
-              TimeRange(Long.MinValue, Long.MaxValue)
-            else
-              tmRange
-          val partKeyAsArray = partKey.toArray
-          val primKeyAsArray = if (primaryKey != null && primaryKey.size > 0) primaryKey.toArray else null
-          val fromKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.beginTime, partKeyAsArray, 0, 0), primKeyAsArray != null, primKeyAsArray)
-          val toKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.endTime, partKeyAsArray, Long.MaxValue, Int.MaxValue), primKeyAsArray != null, primKeyAsArray)
-          val tmpDataByTmPart = new TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag](KvBaseDefalts.defualtTimePartComp) // By time, BucketKey, then PrimaryKey/{transactionid & rowid}. This is little cheaper if we are going to get exact match, because we compare time & then bucketid
-          tmpDataByTmPart.putAll(container.dataByBucketKey.subMap(fromKey, true, toKey, true))
-          val tmFilterMap = tmpDataByTmPart.subMap(fromKey, true, toKey, true)
+        TxnContextCommonFunctions.ReadLockContainer(container)
+        try {
+          if (TxnContextCommonFunctions.IsEmptyKey(partKey) == false) {
+            val tmRng =
+              if (tmRange == null)
+                TimeRange(Long.MinValue, Long.MaxValue)
+              else
+                tmRange
+            val partKeyAsArray = partKey.toArray
+            val primKeyAsArray = if (primaryKey != null && primaryKey.size > 0) primaryKey.toArray else null
+            val fromKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.beginTime, partKeyAsArray, 0, 0), false, null)
+            val toKey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(partKeyAsArray), Key(tmRng.endTime, partKeyAsArray, Long.MaxValue, Int.MaxValue), false, null)
+            val tmpDataByTmPart = new TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag](KvBaseDefalts.defualtTimePartComp) // By time, BucketKey, then PrimaryKey/{transactionid & rowid}. This is little cheaper if we are going to get exact match, because we compare time & then bucketid
+            tmpDataByTmPart.putAll(container.dataByBucketKey.subMap(fromKey, true, toKey, true))
+            val tmFilterMap = tmpDataByTmPart.subMap(fromKey, true, toKey, true)
 
-          if (f != null) {
-            var it1 = tmFilterMap.entrySet().iterator()
-            while (it1.hasNext()) {
-              val entry = it1.next();
-              val value = entry.getValue();
-              if (f(value.value)) {
-                retResult += value.value
-                foundPartKeys += entry.getKey().key
+            if (f != null) {
+              var it1 = tmFilterMap.entrySet().iterator()
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                val value = entry.getValue();
+                if (f(value.value)) {
+                  if (primKeyAsArray == null || IsSameKey(primKeyAsArray, value.value.PrimaryKeyData))
+                    retResult += ((entry.getKey(), value.value))
+                }
+              }
+            } else {
+              var it1 = tmFilterMap.entrySet().iterator()
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                val value = entry.getValue();
+                if (primKeyAsArray == null || IsSameKey(primKeyAsArray, value.value.PrimaryKeyData))
+                  retResult += ((entry.getKey(), value.value))
+              }
+            }
+          } else if (tmRange != null) {
+            val fromKey = KeyWithBucketIdAndPrimaryKey(Int.MinValue, Key(tmRange.beginTime, null, 0, 0), false, null)
+            val toKey = KeyWithBucketIdAndPrimaryKey(Int.MaxValue, Key(tmRange.endTime, null, Long.MaxValue, Int.MaxValue), false, null)
+            val tmFilterMap = container.dataByTmPart.subMap(fromKey, true, toKey, true)
+
+            if (f != null) {
+              var it1 = tmFilterMap.entrySet().iterator()
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                val value = entry.getValue();
+                if (f(value.value)) {
+                  retResult += ((entry.getKey(), value.value))
+                }
+              }
+            } else {
+              var it1 = tmFilterMap.entrySet().iterator()
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                retResult += ((entry.getKey(), entry.getValue().value))
               }
             }
           } else {
-            var it1 = tmFilterMap.entrySet().iterator()
-            while (it1.hasNext()) {
-              val entry = it1.next();
-              retResult += entry.getValue().value
-              foundPartKeys += entry.getKey().key
-            }
-          }
-        } else if (tmRange != null) {
-          val fromKey = KeyWithBucketIdAndPrimaryKey(Int.MinValue, Key(tmRange.beginTime, null, 0, 0), false, null)
-          val toKey = KeyWithBucketIdAndPrimaryKey(Int.MaxValue, Key(tmRange.endTime, null, Long.MaxValue, Int.MaxValue), false, null)
-          val tmFilterMap = container.dataByTmPart.subMap(fromKey, true, toKey, true)
-
-          if (f != null) {
-            var it1 = tmFilterMap.entrySet().iterator()
-            while (it1.hasNext()) {
-              val entry = it1.next();
-              val value = entry.getValue();
-              if (f(value.value)) {
-                retResult += value.value
-                foundPartKeys += entry.getKey().key
+            var it1 = container.dataByTmPart.entrySet().iterator()
+            if (f != null) {
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                val value = entry.getValue();
+                if (f(value.value))
+                  retResult += ((entry.getKey(), value.value))
+              }
+            } else {
+              while (it1.hasNext()) {
+                val entry = it1.next();
+                retResult += ((entry.getKey(), entry.getValue().value))
               }
             }
-          } else {
-            var it1 = tmFilterMap.entrySet().iterator()
-            while (it1.hasNext()) {
-              val entry = it1.next();
-              retResult += entry.getValue().value
-              foundPartKeys += entry.getKey().key
-            }
           }
-        } else {
-          var it1 = container.dataByTmPart.entrySet().iterator()
-          while (it1.hasNext()) {
-            val entry = it1.next();
-            retResult += entry.getValue().value
-            foundPartKeys += entry.getKey().key
+        } catch {
+          case e: Exception => {
+            throw e
           }
+        } finally {
+          TxnContextCommonFunctions.ReadUnlockContainer(container)
         }
       }
-      (retResult.toArray, foundPartKeys.toArray)
+      retResult.toArray
     }
   }
 
@@ -271,7 +339,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     def getMsgContainer(containerName: String, addIfMissing: Boolean): MsgContainerInfo = {
       var fnd = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
       if (fnd == null && addIfMissing) {
-        fnd = new MsgContainerInfo
+        fnd = new MsgContainerInfo(false)
         _messagesOrContainers(containerName) = fnd
       }
       fnd
@@ -285,13 +353,15 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       }
     }
 */
+    /*
     def getAllObjects(containerName: String): Array[MessageContainerBase] = {
-      return TxnContextCommonFunctions.getRddData(getMsgContainer(containerName.toLowerCase, false), null, null, null, null, Array[Key]())._1
+      return TxnContextCommonFunctions.getRddData(getMsgContainer(containerName.toLowerCase, false), null, null, null, null).map(kv => kv._2)
     }
 
     def getObject(containerName: String, partKey: List[String], primaryKey: List[String]): (MessageContainerBase, Boolean) = {
       return TxnContextCommonFunctions.getRecent(getMsgContainer(containerName.toLowerCase, false), partKey, null, primaryKey, null)
     }
+*/
 
     /*
     def getObjects(containerName: String, partKey: List[String], appendCurrentChanges: Boolean): (Array[MessageContainerBase], Boolean) = {
@@ -319,8 +389,8 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     }
 */
 
+    /*
     def containsAny(containerName: String, partKeys: Array[List[String]], primaryKeys: Array[List[String]]): (Boolean, Array[List[String]]) = {
-      /*
       val container = getMsgContainer(containerName.toLowerCase, false)
       if (container != null) {
         val notFndPartkeys = ArrayBuffer[List[String]]()
@@ -341,17 +411,17 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
         }
         return (false, notFndPartkeys.toArray)
       }
-*/
       (false, primaryKeys)
     }
+*/
 
+    /*
     def containsKeys(containerName: String, partKeys: Array[List[String]], primaryKeys: Array[List[String]]): (Array[List[String]], Array[List[String]], Array[List[String]], Array[List[String]]) = {
       val container = getMsgContainer(containerName.toLowerCase, false)
       val matchedPartKeys = ArrayBuffer[List[String]]()
       val unmatchedPartKeys = ArrayBuffer[List[String]]()
       val matchedPrimaryKeys = ArrayBuffer[List[String]]()
       val unmatchedPrimaryKeys = ArrayBuffer[List[String]]()
-      /*
       if (container != null) {
         for (i <- 0 until partKeys.size) {
           val kamanjaData = container.data.getOrElse(InMemoryKeyDataInJson(partKeys(i)), null)
@@ -371,9 +441,9 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
           }
         }
       }
-*/
       (matchedPartKeys.toArray, unmatchedPartKeys.toArray, matchedPrimaryKeys.toArray, unmatchedPrimaryKeys.toArray)
     }
+*/
 
     def setObjects(containerName: String, tmValues: Array[Long], partKeys: Array[Array[String]], values: Array[MessageContainerBase]): Unit = {
       if (tmValues.size != partKeys.size || partKeys.size != values.size) {
@@ -383,26 +453,34 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
 
       val container = getMsgContainer(containerName.toLowerCase, true)
       if (container != null) {
-        for (i <- 0 until tmValues.size) {
-          val bk = partKeys(i)
-          if (TxnContextCommonFunctions.IsEmptyKey(bk) == false) {
-            val t = tmValues(i)
-            val v = values(i)
+        TxnContextCommonFunctions.WriteLockContainer(container)
+        try {
+          for (i <- 0 until tmValues.size) {
+            val bk = partKeys(i)
+            if (TxnContextCommonFunctions.IsEmptyKey(bk) == false) {
+              val t = tmValues(i)
+              val v = values(i)
 
-            if (v.TransactionId == 0)
-              v.TransactionId(txnId) // Setting the current transactionid
+              if (v.TransactionId == 0)
+                v.TransactionId(txnId) // Setting the current transactionid
 
-            val primkey = v.PrimaryKeyData
-            val putkey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(bk), Key(t, bk, v.TransactionId, v.RowNumber), primkey != null && primkey.size > 0, primkey)
-            container.dataByBucketKey.put(putkey, MessageContainerBaseWithModFlag(true, v))
-            container.dataByTmPart.put(putkey, MessageContainerBaseWithModFlag(true, v))
-            /*
-            container.current_msg_cont_data -= value
-            container.current_msg_cont_data += value // to get the value to end
+              val primkey = v.PrimaryKeyData
+              val putkey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(bk), Key(t, bk, v.TransactionId, v.RowNumber), primkey != null && primkey.size > 0, primkey)
+              container.dataByBucketKey.put(putkey, MessageContainerBaseWithModFlag(true, v))
+              container.dataByTmPart.put(putkey, MessageContainerBaseWithModFlag(true, v))
+              /*
+              container.current_msg_cont_data -= value
+              container.current_msg_cont_data += value // to get the value to end
 */
+            }
           }
+        } catch {
+          case e: Exception => {
+            throw e
+          }
+        } finally {
+          TxnContextCommonFunctions.WriteUnlockContainer(container)
         }
-
       }
 
       return
@@ -437,25 +515,40 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       (v, foundPartKey)
     }
 
-    def getRddData(containerName: String, partKey: List[String], tmRange: TimeRange, primaryKey: List[String], f: MessageContainerBase => Boolean, alreadyFoundPartKeys: Array[Key]): (Array[MessageContainerBase], Array[Key]) = {
-      return TxnContextCommonFunctions.getRddData(getMsgContainer(containerName.toLowerCase, false), partKey, tmRange, primaryKey, f, alreadyFoundPartKeys)
+    def getRddData(containerName: String, partKey: List[String], tmRange: TimeRange, primaryKey: List[String], f: MessageContainerBase => Boolean): Array[(KeyWithBucketIdAndPrimaryKey, MessageContainerBase)] = {
+      return TxnContextCommonFunctions.getRddData(getMsgContainer(containerName.toLowerCase, false), partKey, tmRange, primaryKey, f)
     }
   }
 
   private[this] val _buckets = 257 // Prime number
+  private[this] val _parallelBuciets = 11 // Prime number
 
   private[this] val _locks = new Array[Object](_buckets)
 
   // private[this] val _messagesOrContainers = scala.collection.mutable.Map[String, MsgContainerInfo]()
+  private[this] val _cachedContainers = scala.collection.mutable.Map[String, MsgContainerInfo]()
+  private[this] val _containersNames = scala.collection.mutable.Set[String]()
   private[this] val _txnContexts = new Array[scala.collection.mutable.Map[Long, TransactionContext]](_buckets)
-  private[this] val _adapterUniqKeyValData = scala.collection.mutable.Map[String, (Long, String, List[(String, String, String)])]()
-  private[this] val _modelsResult = scala.collection.mutable.Map[Key, scala.collection.mutable.Map[String, SavedMdlResult]]()
+
+  private[this] val _modelsRsltBuckets = new Array[scala.collection.mutable.Map[String, scala.collection.mutable.Map[String, SavedMdlResult]]](_parallelBuciets)
+  private[this] val _modelsRsltBktlocks = new Array[ReentrantReadWriteLock](_parallelBuciets)
+
+  private[this] val _adapterUniqKeyValBuckets = new Array[scala.collection.mutable.Map[String, (Long, String, List[(String, String, String)])]](_parallelBuciets)
+  private[this] val _adapterUniqKeyValBktlocks = new Array[ReentrantReadWriteLock](_parallelBuciets)
+
+  for (i <- 0 until _parallelBuciets) {
+    _modelsRsltBuckets(i) = scala.collection.mutable.Map[String, scala.collection.mutable.Map[String, SavedMdlResult]]()
+    _modelsRsltBktlocks(i) = new ReentrantReadWriteLock(true);
+    _adapterUniqKeyValBuckets(i) = scala.collection.mutable.Map[String, (Long, String, List[(String, String, String)])]()
+    _adapterUniqKeyValBktlocks(i) = new ReentrantReadWriteLock(true);
+  }
 
   private[this] var _kryoSer: com.ligadata.Serialize.Serializer = null
   private[this] var _classLoader: java.lang.ClassLoader = null
   private[this] var _defaultDataStore: DataStore = null
   private[this] var _statusinfoDataStore: DataStore = null
   private[this] var _mdres: MdBaseResolveInfo = null
+  private[this] var _enableEachTransactionCommit = true
   private[this] var _jarPaths: collection.immutable.Set[String] = null // Jar paths where we can resolve all jars (including dependency jars).
 
   for (i <- 0 until _buckets) {
@@ -464,7 +557,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
   }
 
   private[this] def lockIdx(transId: Long): Int = {
-    return (transId % _buckets).toInt
+    return (math.abs(transId) % _buckets).toInt
   }
 
   private[this] def getTransactionContext(transId: Long, addIfMissing: Boolean): TransactionContext = {
@@ -513,10 +606,8 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       logger.debug("Getting DB Connection for dataStoreInfo:%s".format(dataStoreInfo))
       return KeyValueManager.Get(jarPaths, dataStoreInfo)
     } catch {
-      case e: Exception => {
-        logger.error("Failed to GetDataStoreHandle")
-        throw e
-      }
+      case e: Exception => throw e
+      case e: Throwable => throw e
     }
   }
 
@@ -555,7 +646,6 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
   }
 
   /*
-  
   private def loadObjFromDb(transId: Long, msgOrCont: MsgContainerInfo, key: List[String]): KamanjaData = {
     val partKeyStr = KamanjaData.PrepareKey(msgOrCont.objFullName, key, 0, 0)
     var objs: Array[KamanjaData] = new Array[KamanjaData](1)
@@ -571,9 +661,15 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       }
     }
     if (objs(0) != null) {
-      val lockObj = if (msgOrCont.loadedAll) msgOrCont else _locks(lockIdx(transId))
-      lockObj.synchronized {
+      TxnContextCommonFunctions.WriteLockContainer(msgOrCont)
+      try {
         msgOrCont.data(InMemoryKeyDataInJson(key)) = (false, objs(0))
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        TxnContextCommonFunctions.WriteUnlockContainer(msgOrCont)
       }
     }
     return objs(0)
@@ -582,118 +678,64 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
   */
 
   private def localGetObject(transId: Long, containerName: String, partKey: List[String], primaryKey: List[String]): MessageContainerBase = {
-    /*
-    if (TxnContextCommonFunctions.IsEmptyKey(partKey) || TxnContextCommonFunctions.IsEmptyKey(primaryKey))
-      return null
-    val txnCtxt = getTransactionContext(transId, false)
+    val txnCtxt = getTransactionContext(transId, true)
     if (txnCtxt != null) {
-      val (v, foundPartKey) = txnCtxt.getObject(containerName, partKey, primaryKey)
-      if (foundPartKey) {
-        return v
-      }
-      if (v != null) return v // It must be null. Without finding partition key it should not find the primary key
+      // Try to load the key(s) if they exists in global storage.
+      LoadDataIfNeeded(txnCtxt, transId, containerName, Array(null), if (partKey == null) Array(null) else Array(partKey.toArray))
     }
 
-    val container = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
-    if (container != null) {
-      val partKeyStr = InMemoryKeyDataInJson(partKey)
-      val kamanjaData = container.data.getOrElse(partKeyStr, null)
-      if (kamanjaData != null) {
-        // Search for primary key match
-        val v = kamanjaData._2.GetMessageContainerBase(primaryKey.toArray, false)
-        if (txnCtxt != null)
-          txnCtxt.setFetchedObj(containerName, partKeyStr, kamanjaData._2)
-        return v;
-      }
-      // If not found in memory, try in DB
-      val loadedFfData = loadObjFromDb(transId, container, partKey)
-      if (loadedFfData != null) {
-        // Search for primary key match
-        val v = loadedFfData.GetMessageContainerBase(primaryKey.toArray, false)
-        if (txnCtxt != null)
-          txnCtxt.setFetchedObj(containerName, partKeyStr, loadedFfData)
-        return v;
-      }
-      // If not found in DB, Create Empty and set to current transaction context
-      if (txnCtxt != null) {
-        val emptyFfData = new KamanjaData
-        emptyFfData.SetKey(partKey.toArray)
-        emptyFfData.SetTypeName(containerName)
-        txnCtxt.setFetchedObj(containerName, partKeyStr, emptyFfData)
+    val retResult = ArrayBuffer[MessageContainerBase]()
+    if (txnCtxt != null) {
+      val res = txnCtxt.getRddData(containerName, partKey, null, primaryKey, null)
+      if (res.size > 0) {
+        retResult ++= res.map(kv => kv._2)
       }
     }
-*/
+
+    if (retResult.size > 0)
+      return retResult(0)
+
     null
   }
 
   private def localHistoryObjects(transId: Long, containerName: String, partKey: List[String], appendCurrentChanges: Boolean): Array[MessageContainerBase] = {
-    val retVals = ArrayBuffer[MessageContainerBase]()
-    /*
-    if (TxnContextCommonFunctions.IsEmptyKey(partKey))
-      return retVals.toArray
-    val txnCtxt = getTransactionContext(transId, false)
+    val txnCtxt = getTransactionContext(transId, true)
     if (txnCtxt != null) {
-      val (objs, foundPartKey) = txnCtxt.getObjects(containerName, partKey, appendCurrentChanges)
-      retVals ++= objs
-      if (foundPartKey)
-        return retVals.toArray
+      // Try to load the key(s) if they exists in global storage.
+      LoadDataIfNeeded(txnCtxt, transId, containerName, Array(null), if (partKey == null) Array(null) else Array(partKey.toArray))
     }
 
-    val container = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
-    if (container != null) {
-      val partKeyStr = InMemoryKeyDataInJson(partKey)
-      val kamanjaData = container.data.getOrElse(partKeyStr, null)
-      if (kamanjaData != null) {
-        // Search for primary key match
-        if (txnCtxt != null)
-          txnCtxt.setFetchedObj(containerName, partKeyStr, kamanjaData._2)
-        retVals ++= kamanjaData._2.GetAllData
-      } else {
-        val loadedFfData = loadObjFromDb(transId, container, partKey)
-        if (loadedFfData != null) {
-          // Search for primary key match
-          if (txnCtxt != null)
-            txnCtxt.setFetchedObj(containerName, partKeyStr, loadedFfData)
-          retVals ++= loadedFfData.GetAllData
-        } else {
-          // If not found in DB, Create Empty and set to current transaction context
-          if (txnCtxt != null) {
-            val emptyFfData = new KamanjaData
-            emptyFfData.SetKey(partKey.toArray)
-            emptyFfData.SetTypeName(containerName)
-            txnCtxt.setFetchedObj(containerName, partKeyStr, emptyFfData)
-          }
-        }
+    val retResult = ArrayBuffer[MessageContainerBase]()
+    if (txnCtxt != null) {
+      val res = txnCtxt.getRddData(containerName, partKey, null, null, null)
+      if (res.size > 0) {
+        retResult ++= res.map(kv => kv._2)
       }
     }
-*/
-    retVals.toArray
-  }
-  private def localGetAllKeyValues(transId: Long, containerName: String): Array[MessageContainerBase] = {
-    /*
-    val fnd = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
-    if (fnd != null) {
-      if (fnd.loadedAll) {
-        var allObjs = ArrayBuffer[MessageContainerBase]()
-        fnd.data.foreach(kv => {
-          allObjs ++= kv._2._2.GetAllData
-        })
-        val txnCtxt = getTransactionContext(transId, false)
-        if (txnCtxt != null)
-          allObjs ++= txnCtxt.getAllObjects(containerName)
-        return allObjs.toArray
-      } else {
-        throw new Exception("Object %s is not loaded all at once. So, we can not get all objects here".format(fnd.objFullName))
-      }
-    } else {
-      return Array[MessageContainerBase]()
-    }
-*/
-    return Array[MessageContainerBase]()
+
+    retResult.toArray
   }
 
   private def localGetAllObjects(transId: Long, containerName: String): Array[MessageContainerBase] = {
-    return localGetAllKeyValues(transId, containerName)
+    val txnCtxt = getTransactionContext(transId, true)
+    if (txnCtxt != null) {
+      // Try to load the key(s) if they exists in global storage.
+      LoadDataIfNeeded(txnCtxt, transId, containerName, Array(null), Array(null))
+    }
+
+    val retResult = ArrayBuffer[MessageContainerBase]()
+    if (txnCtxt != null) {
+      val res = txnCtxt.getRddData(containerName, null, null, null, null)
+      if (res.size > 0) {
+        retResult ++= res.map(kv => kv._2)
+      }
+    }
+    return retResult.toArray
+  }
+
+  private def getParallelBucketIdx(key: String): Int = {
+    if (key == null) return 0
+    return (math.abs(key.hashCode()) % _parallelBuciets)
   }
 
   private def localGetAdapterUniqueKeyValue(transId: Long, key: String): (Long, String, List[(String, String, String)]) = {
@@ -703,14 +745,28 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       if (v != null) return v
     }
 
-    val v = _adapterUniqKeyValData.getOrElse(key, null)
+    var v: (Long, String, List[(String, String, String)]) = null
+
+    val bktIdx = getParallelBucketIdx(key)
+
+    _adapterUniqKeyValBktlocks(bktIdx).readLock().lock()
+    try {
+      v = _adapterUniqKeyValBuckets(bktIdx).getOrElse(key, null)
+    } catch {
+      case e: Exception => {
+        throw e
+      }
+    } finally {
+      _adapterUniqKeyValBktlocks(bktIdx).readLock().unlock()
+    }
+
     if (v != null) return v
     val results = new ArrayBuffer[(String, (Long, String, List[(String, String, String)]))]()
     val buildAdapOne = (k: Key, v: Value) => {
       buildAdapterUniqueValue(k, v, results)
     }
     try {
-      _defaultDataStore.get("AdapterUniqKvData", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), Array(Array(key)), buildAdapOne)
+      callGetData(_defaultDataStore, "AdapterUniqKvData", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), Array(Array(key)), buildAdapOne)
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -718,8 +774,15 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       }
     }
     if (results.size > 0) {
-      _adapterUniqKeyValData.synchronized {
-        _adapterUniqKeyValData(key) = results(0)._2
+      _adapterUniqKeyValBktlocks(bktIdx).writeLock().lock()
+      try {
+        _adapterUniqKeyValBuckets(bktIdx)(key) = results(0)._2
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        _adapterUniqKeyValBktlocks(bktIdx).writeLock().unlock()
       }
       return results(0)._2
     }
@@ -734,13 +797,27 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       if (v != null) return v
     }
 
-    val v = _modelsResult.getOrElse(k, null)
+    val keystr = key.mkString(",")
+    val bktIdx = getParallelBucketIdx(keystr)
+    var v: scala.collection.mutable.Map[String, SavedMdlResult] = null
+
+    _modelsRsltBktlocks(bktIdx).readLock().lock()
+    try {
+      v = _modelsRsltBuckets(bktIdx).getOrElse(keystr, null)
+    } catch {
+      case e: Exception => {
+        throw e
+      }
+    } finally {
+      _modelsRsltBktlocks(bktIdx).readLock().unlock()
+    }
+
     if (v != null) return v
 
     var objs = new Array[(Key, scala.collection.mutable.Map[String, SavedMdlResult])](1)
     val buildMdlOne = (k: Key, v: Value) => { buildModelsResult(k, v, objs) }
     try {
-      _defaultDataStore.get("ModelResults", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), Array(key.toArray), buildMdlOne)
+      callGetData(_defaultDataStore, "ModelResults", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), Array(key.toArray), buildMdlOne)
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -748,8 +825,15 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       }
     }
     if (objs(0) != null) {
-      _modelsResult.synchronized {
-        _modelsResult(objs(0)._1) = objs(0)._2
+      _modelsRsltBktlocks(bktIdx).writeLock().lock()
+      try {
+        _modelsRsltBuckets(bktIdx)(keystr) = objs(0)._2
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        _modelsRsltBktlocks(bktIdx).writeLock().unlock()
       }
       return objs(0)._2
     }
@@ -760,105 +844,86 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
    * Does at least one of the supplied keys exist in a container with the supplied name?
    */
   private def localContainsAny(transId: Long, containerName: String, partKeys: Array[List[String]], primaryKeys: Array[List[String]]): Boolean = {
+    val txnCtxt = getTransactionContext(transId, true)
     /*
-    var remainingPartKeys = partKeys
-    val txnCtxt = getTransactionContext(transId, false)
+    val bucketKeys = partKeys.map(k => k.toArray)
+    val tmRanges = partKeys.map(k => TimeRange(Long.MinValue, Long.MaxValue))
+
     if (txnCtxt != null) {
-      val (retval, notFoundPartKeys) = txnCtxt.containsAny(containerName, remainingPartKeys, primaryKeys)
-      if (retval)
-        return true
-      remainingPartKeys = notFoundPartKeys
-    }
-
-    val container = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
-    val reMainingForDb = ArrayBuffer[List[String]]()
-    if (container != null) {
-      for (i <- 0 until remainingPartKeys.size) {
-        val kamanjaData = container.data.getOrElse(InMemoryKeyDataInJson(remainingPartKeys(i)), null)
-        if (kamanjaData != null) {
-          // Search for primary key match
-          val fnd = kamanjaData._2.GetMessageContainerBase(primaryKeys(i).toArray, false)
-          if (fnd != null)
-            return true
-        } else {
-          reMainingForDb += remainingPartKeys(i)
-        }
-      }
-
-      for (i <- 0 until reMainingForDb.size) {
-        val kamanjaData = loadObjFromDb(transId, container, reMainingForDb(i))
-        if (kamanjaData != null) {
-          // Search for primary key match
-          val fnd = kamanjaData.GetMessageContainerBase(primaryKeys(i).toArray, false)
-          if (fnd != null)
-            return true
-        }
-      }
+      // Try to load the key(s) if they exists in global storage.
+      LoadDataIfNeeded(txnCtxt, transId, containerName, tmRanges, bucketKeys)
     }
 */
+
+    if (txnCtxt != null) {
+      if (primaryKeys != null && primaryKeys.size > 0 && partKeys != null && partKeys.size == primaryKeys.size) {
+        val sz = partKeys.size
+        for (i <- 0 until sz) {
+          LoadDataIfNeeded(txnCtxt, transId, containerName, Array(null), Array(partKeys(i).toArray))
+          val res = txnCtxt.getRddData(containerName, partKeys(i), null, primaryKeys(i), null)
+          if (res.size > 0)
+            return true
+        }
+      } else if (partKeys != null && partKeys.size > 0) {
+        val sz = partKeys.size
+        for (i <- 0 until sz) {
+          LoadDataIfNeeded(txnCtxt, transId, containerName, Array(null), Array(partKeys(i).toArray))
+          val res = txnCtxt.getRddData(containerName, partKeys(i), null, null, null)
+          if (res.size > 0)
+            return true
+        }
+      }
+      /*
+      else {
+        LoadDataIfNeeded(txnCtxt, transId, containerName, Array(null), Array(null))
+        val res = txnCtxt.getRddData(containerName, null, null, null, null)
+        if (res.size > 0)
+          return true
+      }
+*/
+    }
+
     false
   }
+
   /**
    * Do all of the supplied keys exist in a container with the supplied name?
    */
   private def localContainsAll(transId: Long, containerName: String, partKeys: Array[List[String]], primaryKeys: Array[List[String]]): Boolean = {
-    /*
-    var remainingPartKeys: Array[List[String]] = partKeys
-    var remainingPrimaryKeys: Array[List[String]] = primaryKeys
-    val txnCtxt = getTransactionContext(transId, false)
+    val txnCtxt = getTransactionContext(transId, true)
+    val bucketKeys = partKeys.map(k => k.toArray)
+    val tmRanges = partKeys.map(k => TimeRange(Long.MinValue, Long.MaxValue))
+
     if (txnCtxt != null) {
-      val (matchedPartKeys, unmatchedPartKeys, matchedPrimaryKeys, unmatchedPrimaryKeys) = txnCtxt.containsKeys(containerName, remainingPartKeys, remainingPrimaryKeys)
-      remainingPartKeys = unmatchedPartKeys
-      remainingPrimaryKeys = unmatchedPrimaryKeys
+      // Try to load the key(s) if they exists in global storage.
+      LoadDataIfNeeded(txnCtxt, transId, containerName, tmRanges, bucketKeys)
     }
 
-    val container = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
-    if (container != null) {
-      var unmatchedPartKeys = ArrayBuffer[List[String]]()
-      var unmatchedPrimaryKeys = ArrayBuffer[List[String]]()
-
-      for (i <- 0 until remainingPartKeys.size) {
-        val kamanjaData = container.data.getOrElse(InMemoryKeyDataInJson(remainingPartKeys(i)), null)
-        if (kamanjaData != null) {
-          // Search for primary key match
-          val fnd = kamanjaData._2.GetMessageContainerBase(remainingPrimaryKeys(i).toArray, false)
-          if (fnd != null) {
-            // Matched
-          } else {
-            unmatchedPartKeys += remainingPartKeys(i)
-            unmatchedPrimaryKeys += remainingPrimaryKeys(i)
-          }
-        } else {
-          unmatchedPartKeys += remainingPartKeys(i)
-          unmatchedPrimaryKeys += remainingPrimaryKeys(i)
+    if (txnCtxt != null) {
+      var fntCntr = 0
+      val partKeysCnt = if (partKeys != null && partKeys.size > 0) partKeys.size else 0
+      if (primaryKeys != null && primaryKeys.size > 0 && partKeys != null && partKeys.size == primaryKeys.size) {
+        val sz = partKeys.size
+        for (i <- 0 until sz) {
+          val res = txnCtxt.getRddData(containerName, partKeys(i), null, primaryKeys(i), null)
+          if (res.size == 0)
+            return false
+          fntCntr += 1
+        }
+      } else if (partKeys != null && partKeys.size > 0) {
+        val sz = partKeys.size
+        for (i <- 0 until sz) {
+          val res = txnCtxt.getRddData(containerName, partKeys(i), null, null, null)
+          if (res.size == 0)
+            return false
+          fntCntr += 1
         }
       }
 
-      var unmatchedFinalPatKeys = ArrayBuffer[List[String]]()
-      var unmatchedFinalPrimaryKeys = ArrayBuffer[List[String]]()
-
-      // BUGBUG:: Need to check whether the 1st key loaded 2nd key also. Because same partition key can have multiple primary keys or partition key itself can be duplicated
-      for (i <- 0 until unmatchedPartKeys.size) {
-        val kamanjaData = container.data.getOrElse(InMemoryKeyDataInJson(unmatchedPartKeys(i)), null)
-        if (kamanjaData != null) {
-          // Search for primary key match
-          val fnd = kamanjaData._2.GetMessageContainerBase(unmatchedPrimaryKeys(i).toArray, false)
-          if (fnd != null) {
-            // Matched
-          } else {
-            unmatchedFinalPatKeys += unmatchedPartKeys(i)
-            unmatchedFinalPrimaryKeys += unmatchedPrimaryKeys(i)
-          }
-        } else {
-          unmatchedFinalPatKeys += unmatchedPartKeys(i)
-          unmatchedFinalPrimaryKeys += unmatchedPrimaryKeys(i)
-        }
-      }
-      remainingPartKeys = unmatchedFinalPatKeys.toArray
+      // Checking all partition keys are matching to found keys or not.
+      return (fntCntr == partKeysCnt)
     }
 
-    (remainingPartKeys.size == 0)
-*/
     false
   }
 
@@ -868,17 +933,32 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     val primarykey = value.PrimaryKeyData
     val key = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(k.bucketKey), k, primarykey != null && primarykey.size > 0, primarykey)
     val v1 = MessageContainerBaseWithModFlag(false, value)
-    container.dataByBucketKey.put(key, v1)
-    container.dataByTmPart.put(key, v1)
 
-    val bucketId = KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(k.bucketKey)
-    val loadKey = LoadKeyWithBucketId(bucketId, TimeRange(k.timePartition, k.timePartition), k.bucketKey)
-    container.loadedKeys.add(loadKey)
+    TxnContextCommonFunctions.WriteLockContainer(container)
+    try {
+      container.dataByBucketKey.put(key, v1)
+      container.dataByTmPart.put(key, v1)
+
+      val bucketId = KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(k.bucketKey)
+      val loadKey = LoadKeyWithBucketId(bucketId, TimeRange(k.timePartition, k.timePartition), k.bucketKey)
+      container.loadedKeys.add(loadKey)
+
+    } catch {
+      case e: Exception => {
+        throw e
+      }
+    } finally {
+      TxnContextCommonFunctions.WriteUnlockContainer(container)
+    }
   }
 
-  // Same kind of code is there in localGetObject
-  private def LoadDataIfNeeded(txnCtxt: TransactionContext, transId: Long, containerName: String, tmRangeValues: Array[TimeRange], partKeys: Array[Array[String]]): Unit = {
+  private def LoadDataIfNeeded(txnCtxt: TransactionContext, transId: Long, contName: String, tmRangeValues: Array[TimeRange], partKeys: Array[Array[String]]): Unit = {
     if (tmRangeValues.size == partKeys.size) {
+      val containerName = contName.toLowerCase
+
+      // Check whether this table is in Cache or not
+      var cacheContainer = _cachedContainers.getOrElse(containerName, null)
+
       val container = txnCtxt.getMsgContainer(containerName.toLowerCase, true) // adding if not there
       if (container != null) {
         val buildOne = (k: Key, v: Value) => {
@@ -898,11 +978,48 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
             if (container.loadedKeys.contains(loadKey) == false) {
               try {
                 logger.debug("Table %s Key %s for timerange: (%d,%d)".format(containerName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime))
-                if (tr != null)
-                  _defaultDataStore.get(containerName, Array(tr), Array(bk), buildOne)
-                else
-                  _defaultDataStore.get(containerName, Array(bk), buildOne)
-                container.loadedKeys.add(loadKey)
+                if (cacheContainer != null) {
+                  TxnContextCommonFunctions.ReadLockContainer(cacheContainer)
+                  try {
+                    logger.debug("Going to cached contaienr (%s) to get the data for bk".format(containerName))
+                    val fndValuesAndKeys = TxnContextCommonFunctions.getRddData(cacheContainer, bk.toList, tr, null, null)
+                    TxnContextCommonFunctions.WriteLockContainer(container)
+                    try {
+                      fndValuesAndKeys.map(kv => {
+                        val v1 = MessageContainerBaseWithModFlag(false, kv._2)
+                        container.dataByBucketKey.put(kv._1, v1)
+                        container.dataByTmPart.put(kv._1, v1)
+                      })
+                    } catch {
+                      case e: Exception => {
+                        throw e
+                      }
+                    } finally {
+                      TxnContextCommonFunctions.WriteUnlockContainer(container)
+                    }
+                  } catch {
+                    case e: Exception => {
+                      throw e
+                    }
+                  } finally {
+                    TxnContextCommonFunctions.ReadUnlockContainer(cacheContainer)
+                  }
+                } else {
+                  if (tr != null)
+                    callGetData(_defaultDataStore, containerName, Array(tr), Array(bk), buildOne)
+                  else
+                    callGetData(_defaultDataStore, containerName, Array(bk), buildOne)
+                }
+                TxnContextCommonFunctions.WriteLockContainer(container)
+                try {
+                  container.loadedKeys.add(loadKey)
+                } catch {
+                  case e: Exception => {
+                    throw e
+                  }
+                } finally {
+                  TxnContextCommonFunctions.WriteUnlockContainer(container)
+                }
               } catch {
                 case e: ObjectNotFoundException => {
                   val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -921,8 +1038,45 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
             if (container.loadedKeys.contains(loadKey) == false) {
               try {
                 logger.debug("Table %s Key %s for timerange: (%d,%d)".format(containerName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime))
-                _defaultDataStore.get(containerName, Array(tr), buildOne)
-                container.loadedKeys.add(loadKey)
+                if (cacheContainer != null) {
+                  TxnContextCommonFunctions.ReadLockContainer(cacheContainer)
+                  try {
+                    logger.debug("Going to cached contaienr (%s) to get the data for tr".format(containerName))
+                    val fndValuesAndKeys = TxnContextCommonFunctions.getRddData(cacheContainer, bk.toList, tr, null, null)
+                    TxnContextCommonFunctions.WriteLockContainer(container)
+                    try {
+                      fndValuesAndKeys.map(kv => {
+                        val v1 = MessageContainerBaseWithModFlag(false, kv._2)
+                        container.dataByBucketKey.put(kv._1, v1)
+                        container.dataByTmPart.put(kv._1, v1)
+                      })
+                    } catch {
+                      case e: Exception => {
+                        throw e
+                      }
+                    } finally {
+                      TxnContextCommonFunctions.WriteUnlockContainer(container)
+                    }
+                  } catch {
+                    case e: Exception => {
+                      throw e
+                    }
+                  } finally {
+                    TxnContextCommonFunctions.ReadUnlockContainer(cacheContainer)
+                  }
+                } else {
+                  callGetData(_defaultDataStore, containerName, Array(tr), buildOne)
+                }
+                TxnContextCommonFunctions.WriteLockContainer(container)
+                try {
+                  container.loadedKeys.add(loadKey)
+                } catch {
+                  case e: Exception => {
+                    throw e
+                  }
+                } finally {
+                  TxnContextCommonFunctions.WriteUnlockContainer(container)
+                }
               } catch {
                 case e: ObjectNotFoundException => {
                   val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -941,8 +1095,45 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
             if (container.loadedKeys.contains(loadKey) == false) {
               try {
                 logger.debug("Table %s Key %s for timerange: (%d,%d)".format(containerName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime))
-                _defaultDataStore.get(containerName, buildOne)
-                container.loadedKeys.add(loadKey)
+                if (cacheContainer != null) {
+                  TxnContextCommonFunctions.ReadLockContainer(cacheContainer)
+                  try {
+                    logger.debug("Going to cached contaienr (%s) to get the data".format(containerName))
+                    val fndValuesAndKeys = TxnContextCommonFunctions.getRddData(cacheContainer, bk.toList, tr, null, null)
+                    TxnContextCommonFunctions.WriteLockContainer(container)
+                    try {
+                      fndValuesAndKeys.map(kv => {
+                        val v1 = MessageContainerBaseWithModFlag(false, kv._2)
+                        container.dataByBucketKey.put(kv._1, v1)
+                        container.dataByTmPart.put(kv._1, v1)
+                      })
+                    } catch {
+                      case e: Exception => {
+                        throw e
+                      }
+                    } finally {
+                      TxnContextCommonFunctions.WriteUnlockContainer(container)
+                    }
+                  } catch {
+                    case e: Exception => {
+                      throw e
+                    }
+                  } finally {
+                    TxnContextCommonFunctions.ReadUnlockContainer(cacheContainer)
+                  }
+                } else {
+                  callGetData(_defaultDataStore, containerName, buildOne)
+                }
+                TxnContextCommonFunctions.WriteLockContainer(container)
+                try {
+                  container.loadedKeys.add(loadKey)
+                } catch {
+                  case e: Exception => {
+                    throw e
+                  }
+                } finally {
+                  TxnContextCommonFunctions.WriteUnlockContainer(container)
+                }
               } catch {
                 case e: ObjectNotFoundException => {
                   val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -1004,7 +1195,36 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
 
   //BUGBUG:: May be we need to lock before we do anything here
   override def Shutdown: Unit = {
-    _adapterUniqKeyValData.clear
+    if (_modelsRsltBuckets != null) {
+      for (i <- 0 until _parallelBuciets) {
+        _modelsRsltBktlocks(i).writeLock().lock()
+        try {
+          _modelsRsltBuckets(i).clear()
+        } catch {
+          case e: Exception => {
+            // throw e
+          }
+        } finally {
+          _modelsRsltBktlocks(i).writeLock().unlock()
+        }
+      }
+    }
+
+    if (_adapterUniqKeyValBuckets != null) {
+      for (i <- 0 until _parallelBuciets) {
+        _adapterUniqKeyValBktlocks(i).writeLock().lock()
+        try {
+          _adapterUniqKeyValBuckets(i).clear()
+        } catch {
+          case e: Exception => {
+            // throw e
+          }
+        } finally {
+          _adapterUniqKeyValBktlocks(i).writeLock().unlock()
+        }
+      }
+    }
+
     if (_defaultDataStore != null)
       _defaultDataStore.Shutdown
     _defaultDataStore = null
@@ -1087,6 +1307,36 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       }
     })
 */
+    if (containersInfo != null) {
+      containersInfo.foreach(ci => {
+        val c = ci.containerName.toLowerCase
+        if (_mgr.Container(c, -1, false) != None)
+          _containersNames.add(c)
+        else
+          _containersNames.remove(c) // remove it incase if it exists in set
+      })
+    }
+
+    ResolveEnableEachTransactionCommit
+  }
+
+  override def CacheContainers(clusterId: String): Unit = {
+    val tmpContainersStr = _mgr.GetUserProperty(clusterId, "containers2cache")
+    val containersNames = if (tmpContainersStr != null) tmpContainersStr.trim.toLowerCase.split(",").map(s => s.trim).filter(s => s.size > 0) else Array[String]()
+    if (containersNames.size > 0) {
+      containersNames.foreach(c => {
+        var cacheContainer = _cachedContainers.getOrElse(c, null)
+        if (cacheContainer == null) {
+          // Load the container data into cache
+          cacheContainer = new MsgContainerInfo(true)
+          val buildOne = (k: Key, v: Value) => {
+            collectKeyAndValues(k, v, cacheContainer)
+          }
+          callGetData(_defaultDataStore, c, buildOne)
+          _cachedContainers(c) = cacheContainer
+        }
+      })
+    }
   }
 
   private def Clone(vals: Array[MessageContainerBase]): Array[MessageContainerBase] = {
@@ -1160,8 +1410,8 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     localSaveModelsResult(transId, key, value)
   }
 
-  override def getChangedData(tempTransId: Long, includeMessages: Boolean, includeContainers: Boolean): scala.collection.immutable.Map[String, Array[Key]] = {
-    val changedContainersData = scala.collection.mutable.Map[String, Array[Key]]()
+  override def getChangedData(tempTransId: Long, includeMessages: Boolean, includeContainers: Boolean): scala.collection.immutable.Map[String, List[Key]] = {
+    val changedContainersData = scala.collection.mutable.Map[String, List[Key]]()
 
     // Commit Data and Removed Transaction information from status
     val txnCtxt = getTransactionContext(tempTransId, false)
@@ -1171,38 +1421,100 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     val messagesOrContainers = txnCtxt.getAllMessagesAndContainers
 
     messagesOrContainers.foreach(v => {
-      // val mc = _messagesOrContainers.getOrElse(v._1, null)
-      val canConsiderThis = ((includeMessages && includeContainers) ||
-        (includeMessages && /* v._2.containerType.tTypeType == ObjTypeType.tContainer && */ ( /* mc.isContainer == false && */ v._2.isContainer == false)) ||
-        (includeContainers && /* v._2.containerType.tTypeType == ObjTypeType.tContainer && */ ( /* mc.isContainer || */ v._2.isContainer)))
+      val canConsiderThis = if (includeMessages && includeContainers) {
+        true
+      } else {
+        val isContainer = _containersNames.contains(v._1)
+        ((includeMessages && isContainer == false) ||
+          (includeContainers && isContainer))
+      }
 
       if (canConsiderThis) {
-        var foundPartKeys = new ArrayBuffer[Key](v._2.dataByTmPart.size())
-        var it1 = v._2.dataByTmPart.entrySet().iterator()
-        while (it1.hasNext()) {
-          val entry = it1.next();
-          foundPartKeys += entry.getKey().key
+        TxnContextCommonFunctions.ReadLockContainer(v._2)
+        try {
+          var foundPartKeys = new ArrayBuffer[Key](v._2.dataByTmPart.size())
+          var it1 = v._2.dataByTmPart.entrySet().iterator()
+          while (it1.hasNext()) {
+            val entry = it1.next();
+            val v = entry.getValue()
+            if (v.modified)
+              foundPartKeys += entry.getKey().key
+          }
+          if (foundPartKeys.size > 0)
+            changedContainersData(v._1) = foundPartKeys.toList
+        } catch {
+          case e: Exception => {
+            throw e
+          }
+        } finally {
+          TxnContextCommonFunctions.ReadUnlockContainer(v._2)
         }
-        if (foundPartKeys.size > 0)
-          changedContainersData(v._1) = foundPartKeys.toArray
       }
     })
 
     return changedContainersData.toMap
   }
 
+  override def rollbackData(transId: Long): Unit = {
+    removeTransactionContext(transId)
+  }
+
   // Final Commit for the given transaction
   // BUGBUG:: For now we are committing all the data into default datastore. Not yet handled message level datastore.
-  override def commitData(transId: Long, key: String, value: String, outResults: List[(String, String, String)]): Unit = {
+  override def commitData(transId: Long, key: String, value: String, outResults: List[(String, String, String)], forceCommit: Boolean): Unit = {
+
+    // This block of code just does in-memory updates for caching containers
+    val txnCtxt = getTransactionContext(transId, false)
+    val messagesOrContainers = if (txnCtxt != null) txnCtxt.getAllMessagesAndContainers else Map[String, MsgContainerInfo]()
+    messagesOrContainers.foreach(v => {
+      var cacheContainer = _cachedContainers.getOrElse(v._1, null)
+      if (cacheContainer != null) {
+        TxnContextCommonFunctions.ReadLockContainer(v._2)
+        try {
+          var it1 = v._2.dataByTmPart.entrySet().iterator()
+          TxnContextCommonFunctions.WriteLockContainer(cacheContainer);
+          try {
+            while (it1.hasNext()) {
+              val entry = it1.next();
+              val v = entry.getValue()
+              if (v.modified) {
+                val k = entry.getKey()
+                val v1 = MessageContainerBaseWithModFlag(false, v.value)
+                cacheContainer.dataByBucketKey.put(k, v1)
+                cacheContainer.dataByTmPart.put(k, v1)
+              }
+            }
+          } catch {
+            case e: Exception => {
+              throw e
+            }
+          } finally {
+            TxnContextCommonFunctions.WriteUnlockContainer(cacheContainer)
+          }
+        } catch {
+          case e: Exception => {
+            throw e
+          }
+        } finally {
+          TxnContextCommonFunctions.ReadUnlockContainer(v._2)
+        }
+      }
+    })
+
+    if (forceCommit == false && _enableEachTransactionCommit == false) {
+      removeTransactionContext(transId)
+      return
+    }
+
     val outputResults = if (outResults != null) outResults else List[(String, String, String)]()
 
     // Commit Data and Removed Transaction information from status
-    val txnCtxt = getTransactionContext(transId, false)
+    // val txnCtxt = getTransactionContext(transId, false)
     if (txnCtxt == null && (key == null || value == null))
       return
 
     // Persist current transaction objects
-    val messagesOrContainers = if (txnCtxt != null) txnCtxt.getAllMessagesAndContainers else Map[String, MsgContainerInfo]()
+    // val messagesOrContainers = if (txnCtxt != null) txnCtxt.getAllMessagesAndContainers else Map[String, MsgContainerInfo]()
 
     val localValues = scala.collection.mutable.Map[String, (Long, String, List[(String, String, String)])]()
 
@@ -1210,7 +1522,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       localValues(key) = (transId, value, outputResults)
 
     val adapterUniqKeyValData = if (localValues.size > 0) localValues.toMap else if (txnCtxt != null) txnCtxt.getAllAdapterUniqKeyValData else Map[String, (Long, String, List[(String, String, String)])]()
-    val modelsResult = if (txnCtxt != null) txnCtxt.getAllModelsResult else Map[Key, scala.collection.mutable.Map[String, SavedMdlResult]]()
+    val modelsResult = /* if (txnCtxt != null) txnCtxt.getAllModelsResult else */ Map[Key, scala.collection.mutable.Map[String, SavedMdlResult]]()
 
     if (_kryoSer == null) {
       _kryoSer = SerializerManager.GetSerializer("kryo")
@@ -1228,29 +1540,49 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     messagesOrContainers.foreach(v => {
       dataForContainer.clear
       //       val mc = _messagesOrContainers.getOrElse(v._1, null)
-      var it1 = v._2.dataByTmPart.entrySet().iterator()
-      while (it1.hasNext()) {
-        val entry = it1.next();
-        val v = entry.getValue()
-        if (v.modified) {
-          val k = entry.getKey()
-          bos.reset
-          SerializeDeserialize.Serialize(v.value, dos)
-          dataForContainer += ((k.key, Value("manual", bos.toByteArray)))
+      TxnContextCommonFunctions.ReadLockContainer(v._2)
+      try {
+        var it1 = v._2.dataByTmPart.entrySet().iterator()
+        while (it1.hasNext()) {
+          val entry = it1.next();
+          val v = entry.getValue()
+          if (v.modified) {
+            val k = entry.getKey()
+            bos.reset
+            SerializeDeserialize.Serialize(v.value, dos)
+            dataForContainer += ((k.key, Value("manual", bos.toByteArray)))
+          }
         }
+        // Make sure we lock it if we need to populate mc
+        // mc.dataByTmPart.putAll(v._2.dataByTmPart) // Assigning new data
+        // mc.dataByBucketKey.putAll(v._2.dataByTmPart) // Assigning new data
+
+        // v._2.current_msg_cont_data.clear
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        TxnContextCommonFunctions.ReadUnlockContainer(v._2)
       }
 
-      // mc.dataByTmPart.putAll(v._2.dataByTmPart) // Assigning new data
-      // mc.dataByBucketKey.putAll(v._2.dataByTmPart) // Assigning new data
-
-      // v._2.current_msg_cont_data.clear
       if (dataForContainer.size > 0)
         commiting_data += ((v._1, dataForContainer.toArray))
     })
 
     dataForContainer.clear
     adapterUniqKeyValData.foreach(v1 => {
-      _adapterUniqKeyValData(v1._1) = v1._2
+      val bktIdx = getParallelBucketIdx(v1._1)
+      _adapterUniqKeyValBktlocks(bktIdx).writeLock().lock()
+      try {
+        _adapterUniqKeyValBuckets(bktIdx)(v1._1) = v1._2
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        _adapterUniqKeyValBktlocks(bktIdx).writeLock().unlock()
+      }
       val json = ("T" -> v1._2._1) ~
         ("V" -> v1._2._2) ~
         ("Qs" -> v1._2._3.map(qsres => { qsres._1 })) ~
@@ -1263,7 +1595,18 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
 
     dataForContainer.clear
     modelsResult.foreach(v1 => {
-      _modelsResult(v1._1) = v1._2
+      val keystr = v1._1.bucketKey.mkString(",")
+      val bktIdx = getParallelBucketIdx(keystr)
+      _modelsRsltBktlocks(bktIdx).writeLock().lock()
+      try {
+        _modelsRsltBuckets(bktIdx)(keystr) = v1._2
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        _modelsRsltBktlocks(bktIdx).writeLock().unlock()
+      }
       dataForContainer += ((v1._1, Value("kryo", _kryoSer.SerializeObjectToByteArray(v1._2))))
     })
     if (dataForContainer.size > 0)
@@ -1303,10 +1646,13 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
           logger.debug("ObjKey:(%d, %s, %d, %d), Value Info:(Ser:%s, Size:%d)".format(kv._1.timePartition, kv._1.bucketKey.mkString(","), kv._1.transactionId, kv._1.rowId, kv._2.serializerType, kv._2.serializedInfo.size))
         })
       })
-      _defaultDataStore.put(commiting_data.toArray)
+
+      callSaveData(_defaultDataStore, commiting_data.toArray)
+
     } catch {
       case e: Exception => {
-        logger.error("Failed to write data")
+        val causeStackTrace = StackTrace.ThrowableTraceString(e)
+        logger.error("Failed to save data, cause: \n" + causeStackTrace)
         throw e
       }
     }
@@ -1331,15 +1677,50 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
   override def clearIntermediateResults: Unit = {
     /*
     _messagesOrContainers.foreach(v => {
-      v._2.dataByBucketKey.clear()
-      v._2.dataByTmPart.clear()
-      // v._2.current_msg_cont_data.clear
+      TxnContextCommonFunctions.WriteLockContainer(v._2)
+      try {
+        v._2.dataByBucketKey.clear()
+        v._2.dataByTmPart.clear()
+        // v._2.current_msg_cont_data.clear
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        TxnContextCommonFunctions.WriteUnlockContainer(v._2)
+      }
     })
 */
 
-    _adapterUniqKeyValData.clear
+    if (_modelsRsltBuckets != null) {
+      for (i <- 0 until _parallelBuciets) {
+        _modelsRsltBktlocks(i).writeLock().lock()
+        try {
+          _modelsRsltBuckets(i).clear()
+        } catch {
+          case e: Exception => {
+            // throw e
+          }
+        } finally {
+          _modelsRsltBktlocks(i).writeLock().unlock()
+        }
+      }
+    }
 
-    _modelsResult.clear
+    if (_adapterUniqKeyValBuckets != null) {
+      for (i <- 0 until _parallelBuciets) {
+        _adapterUniqKeyValBktlocks(i).writeLock().lock()
+        try {
+          _adapterUniqKeyValBuckets(i).clear()
+        } catch {
+          case e: Exception => {
+            // throw e
+          }
+        } finally {
+          _adapterUniqKeyValBktlocks(i).writeLock().unlock()
+        }
+      }
+    }
   }
 
   // Clear Intermediate results After updating them on different node or different component (like KVInit), etc
@@ -1351,14 +1732,20 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     unloadMsgsContainers.foreach(mc => {
       val msgCont = _messagesOrContainers.getOrElse(mc.trim.toLowerCase, null)
       if (msgCont != null) {
-        if (msgCont.dataByBucketKey != null)
-          msgCont.dataByBucketKey.clear()
-        if (msgCont.dataByTmPart != null)
-          msgCont.dataByTmPart.clear()
-        /*
-          if (msgCont.current_msg_cont_data != null)
-          msgCont.current_msg_cont_data.clear
-*/
+        TxnContextCommonFunctions.WriteLockContainer(msgCont)
+        try {
+          if (msgCont.dataByBucketKey != null)
+            msgCont.dataByBucketKey.clear()
+          if (msgCont.dataByTmPart != null)
+            msgCont.dataByTmPart.clear()
+          if (msgCont.current_msg_cont_data != null) msgCont.current_msg_cont_data.clear
+        } catch {
+          case e: Exception => {
+            throw e
+          }
+        } finally {
+          TxnContextCommonFunctions.WriteUnlockContainer(msgCont)
+        }
       }
     })
 */
@@ -1372,7 +1759,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       buildAdapterUniqueValue(k, v, results)
     }
 
-    _defaultDataStore.get("AdapterUniqKvData", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), keys.map(k => Array(k)), buildAdapOne)
+    callGetData(_defaultDataStore, "AdapterUniqKvData", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), keys.map(k => Array(k)), buildAdapOne)
 
     logger.debug("Loaded %d committing informations".format(results.size))
     results.toArray
@@ -1394,8 +1781,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     val ukvs = validateUniqVals.map(kv => {
       (Key(KvBaseDefalts.defaultTime, Array(kv._1), 0L, 0), Value("", kv._2.getBytes("UTF8")))
     })
-
-    _defaultDataStore.put(Array(("ValidateAdapterPartitionInfo", ukvs)))
+    callSaveData(_defaultDataStore, Array(("ValidateAdapterPartitionInfo", ukvs)))
   }
 
   private def buildValidateAdapInfo(k: Key, v: Value, results: ArrayBuffer[(String, String)]): Unit = {
@@ -1408,34 +1794,21 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
     val collectorValidateAdapInfo = (k: Key, v: Value) => {
       buildValidateAdapInfo(k, v, results)
     }
-    _defaultDataStore.get("CheckPointInformation", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), collectorValidateAdapInfo)
+    callGetData(_defaultDataStore, "CheckPointInformation", Array(TimeRange(KvBaseDefalts.defaultTime, KvBaseDefalts.defaultTime)), collectorValidateAdapInfo)
     logger.debug("Loaded %d Validate (Check Point) Adapter Information".format(results.size))
     results.toArray
   }
 
-  private def collectKeyAndValues(k: Key, v: Value, readValues: ArrayBuffer[(Key, MessageContainerBase)]): Unit = {
-    val o = buildObject(k, v)
-    readValues += ((k, o))
-  }
-
   override def ReloadKeys(tempTransId: Long, containerName: String, keys: List[Key]): Unit = {
-    /*
-    val container = _messagesOrContainers.getOrElse(containerName.toLowerCase, null)
-    if (container != null) {
-      val readValues = ArrayBuffer[(Key, MessageContainerBase)]()
+    if (containerName == null || keys == null || keys.size == 0) return ;
+    val contName = containerName.toLowerCase
+    var cacheContainer = _cachedContainers.getOrElse(contName, null)
+    if (cacheContainer != null) {
       val buildOne = (k: Key, v: Value) => {
-        collectKeyAndValues(k, v, readValues)
+        collectKeyAndValues(k, v, cacheContainer)
       }
-      _defaultDataStore.get(containerName, keys.toArray, buildOne)
-
-      readValues.foreach(kv => {
-        val primkey = kv._2.PrimaryKeyData
-        val putkey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(kv._1.bucketKey), kv._1, primkey != null && primkey.size > 0, primkey)
-        // container.dataByBucketKey.put(putkey, kv._2)
-        // container.dataByTmPart.put(putkey, kv._2)
-      })
+      callGetData(_defaultDataStore, contName, keys.toArray, buildOne)
     }
-*/
   }
 
   private def getLocalRecent(transId: Long, containerName: String, partKey: List[String], tmRange: TimeRange, f: MessageContainerBase => Boolean): Option[MessageContainerBase] = {
@@ -1481,11 +1854,12 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       val tmRng = if (tmRange != null) Array(tmRange) else Array[TimeRange]()
       val prtKeys = if (partKey != null) Array(partKey.toArray) else Array[Array[String]]()
 
-      _defaultDataStore.get(containerName, tmRng, prtKeys, buildOne)
+      get(_defaultDataStore, containerName, tmRng, prtKeys, buildOne)
 
       readValues.foreach(kv => {
         val primkey = kv._2.PrimaryKeyData
         val putkey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(kv._1.bucketKey), kv._1, primkey != null && primkey.size > 0, primkey)
+        // Lock this container for write if enable these puts
         // container.dataByBucketKey.put(putkey, kv._2)
         // container.dataByTmPart.put(putkey, kv._2)
       })
@@ -1522,13 +1896,11 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       LoadDataIfNeeded(txnCtxt, transId, containerName, Array(tmRange), if (partKey != null) Array(partKey.toArray) else Array(null))
     }
 
-    val foundPartKeys = ArrayBuffer[Key]()
     val retResult = ArrayBuffer[MessageContainerBase]()
     if (txnCtxt != null) {
-      val (res, foundPartKeys1) = txnCtxt.getRddData(containerName, partKey, tmRange, null, f, foundPartKeys.toArray)
-      if (foundPartKeys1.size > 0) {
-        foundPartKeys ++= foundPartKeys1
-        retResult ++= res
+      val res = txnCtxt.getRddData(containerName, partKey, tmRange, null, f)
+      if (res.size > 0) {
+        retResult ++= res.map(kv => kv._2)
         if (TxnContextCommonFunctions.IsEmptyKey(partKey) == false) // Already found the key, no need to go down
           return retResult.toArray
       }
@@ -1571,7 +1943,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       val prtKeys = if (partKey != null) Array(partKey.toArray) else Array[Array[String]]()
 
       try {
-        _defaultDataStore.get(containerName, tmRng, prtKeys, buildOne)
+        get(_defaultDataStore, containerName, tmRng, prtKeys, buildOne)
       } catch {
         case e: Exception => {
           val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -1586,6 +1958,7 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
       readValues.foreach(kv => {
         val primkey = kv._2.PrimaryKeyData
         val putkey = KeyWithBucketIdAndPrimaryKey(KeyWithBucketIdAndPrimaryKeyCompHelper.BucketIdForBucketKey(kv._1.bucketKey), kv._1, primkey != null && primkey.size > 0, primkey)
+        // Lock this container for write if enable these puts
         // container.dataByBucketKey.put(putkey, kv._2)
         // container.dataByTmPart.put(putkey, kv._2)
       })
@@ -1618,4 +1991,352 @@ object SimpleEnvContextImpl extends EnvContext with LogTrait {
 
     localSetObject(transId, containerName, tmValues.toArray, partKeyValues.toArray, finalValues.toArray)
   }
+
+  override def setAdapterUniqKeyAndValues(keyAndValues: List[(String, String)]): Unit = {
+    val dataForContainer = ArrayBuffer[(Key, Value)]()
+    val emptyLst = List[(String, String, String)]()
+    keyAndValues.foreach(v1 => {
+      val bktIdx = getParallelBucketIdx(v1._1)
+
+      _adapterUniqKeyValBktlocks(bktIdx).writeLock().lock()
+      try {
+        _adapterUniqKeyValBuckets(bktIdx)(v1._1) = (0, v1._2, emptyLst)
+      } catch {
+        case e: Exception => {
+          throw e
+        }
+      } finally {
+        _adapterUniqKeyValBktlocks(bktIdx).writeLock().unlock()
+      }
+
+      val json = ("T" -> 0) ~
+        ("V" -> v1._2) ~
+        ("Qs" -> emptyLst.map(qsres => { qsres._1 })) ~
+        ("Res" -> emptyLst.map(qsres => { qsres._2 }))
+      val compjson = compact(render(json))
+      dataForContainer += ((Key(KvBaseDefalts.defaultTime, Array(v1._1), 0, 0), Value("json", compjson.getBytes("UTF8"))))
+    })
+    if (dataForContainer.size > 0) {
+      callSaveData(_defaultDataStore, Array(("AdapterUniqKvData", dataForContainer.toArray)))
+    }
+  }
+
+  private def callSaveData(dataStore: DataStoreOperations, data_list: Array[(String, Array[(Key, Value)])]): Unit = {
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneSave = false
+
+    while (!doneSave) {
+      try {
+        dataStore.put(data_list)
+        doneSave = true
+      } catch {
+        case e: FatalAdapterException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: StorageDMLException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: StorageDDLException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: Exception => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: Throwable => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+      }
+
+      if (!doneSave) {
+        try {
+          logger.error("Failed to save data into datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {
+
+          }
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+  }
+
+  // BUGBUG:: We can make all gets as simple template for exceptions handling and call that.
+  private def callGetData(dataStore: DataStoreOperations, containerName: String, callbackFunction: (Key, Value) => Unit): Unit = {
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneGet = false
+
+    while (!doneGet) {
+      try {
+        dataStore.get(containerName, callbackFunction)
+        doneGet = true
+      } catch {
+        case e @ (_: ObjectNotFoundException | _: KeyNotFoundException) => {
+          logger.debug("Failed to get data from container:%s".format(containerName))
+          doneGet = true
+        }
+        case e: FatalAdapterException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDMLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDDLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Exception => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+      }
+
+      if (!doneGet) {
+        try {
+          logger.error("Failed to get data from datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+  }
+
+  private def callGetData(dataStore: DataStoreOperations, containerName: String, keys: Array[Key], callbackFunction: (Key, Value) => Unit): Unit = {
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneGet = false
+
+    while (!doneGet) {
+      try {
+        dataStore.get(containerName, keys, callbackFunction)
+        doneGet = true
+      } catch {
+        case e @ (_: ObjectNotFoundException | _: KeyNotFoundException) => {
+          logger.debug("Failed to get data from container:%s".format(containerName))
+          doneGet = true
+        }
+        case e: FatalAdapterException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDMLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDDLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Exception => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+      }
+
+      if (!doneGet) {
+        try {
+          logger.error("Failed to get data from datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+  }
+
+  private def callGetData(dataStore: DataStoreOperations, containerName: String, timeRanges: Array[TimeRange], callbackFunction: (Key, Value) => Unit): Unit = {
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneGet = false
+
+    while (!doneGet) {
+      try {
+        dataStore.get(containerName, timeRanges, callbackFunction)
+        doneGet = true
+      } catch {
+        case e @ (_: ObjectNotFoundException | _: KeyNotFoundException) => {
+          logger.debug("Failed to get data from container:%s".format(containerName))
+          doneGet = true
+        }
+        case e: FatalAdapterException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDMLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDDLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Exception => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+      }
+
+      if (!doneGet) {
+        try {
+          logger.error("Failed to get data from datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+  }
+
+  private def callGetData(dataStore: DataStoreOperations, containerName: String, timeRanges: Array[TimeRange], bucketKeys: Array[Array[String]], callbackFunction: (Key, Value) => Unit): Unit = {
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneGet = false
+
+    while (!doneGet) {
+      try {
+        dataStore.get(containerName, timeRanges, bucketKeys, callbackFunction)
+        doneGet = true
+      } catch {
+        case e @ (_: ObjectNotFoundException | _: KeyNotFoundException) => {
+          logger.debug("Failed to get data from container:%s".format(containerName))
+          doneGet = true
+        }
+        case e: FatalAdapterException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDMLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDDLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Exception => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+      }
+
+      if (!doneGet) {
+        try {
+          logger.error("Failed to get data from datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+  }
+
+  private def callGetData(dataStore: DataStoreOperations, containerName: String, bucketKeys: Array[Array[String]], callbackFunction: (Key, Value) => Unit): Unit = {
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneGet = false
+
+    while (!doneGet) {
+      try {
+        dataStore.get(containerName, bucketKeys, callbackFunction)
+        doneGet = true
+      } catch {
+        case e @ (_: ObjectNotFoundException | _: KeyNotFoundException) => {
+          logger.debug("Failed to get data from container:%s".format(containerName))
+          doneGet = true
+        }
+        case e: FatalAdapterException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDMLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: StorageDDLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Exception => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to get data from container:%s.\nStackTrace:%s".format(containerName, stackTrace))
+        }
+      }
+
+      if (!doneGet) {
+        try {
+          logger.error("Failed to get data from datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+  }
+
+  def EnableEachTransactionCommit: Boolean = _enableEachTransactionCommit
 }

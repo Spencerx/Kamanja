@@ -2,7 +2,7 @@ package com.ligadata.utilityservice
 
 import kafka.producer.{ ProducerConfig, Producer, KeyedMessage, Partitioner }
 import kafka.utils.VerifiableProperties
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 
 import java.util.Properties
@@ -12,7 +12,7 @@ import java.util.Properties
 object KafkaCmdImpl {
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)  
+  val logger = LogManager.getLogger(loggerName)  
   var partIdx: Int = 0
    
   /**

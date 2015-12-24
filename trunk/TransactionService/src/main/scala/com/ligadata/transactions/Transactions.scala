@@ -18,7 +18,7 @@ package com.ligadata.transactions
 
 import com.ligadata.KamanjaBase.{ EnvContext }
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -32,7 +32,7 @@ import com.ligadata.keyvaluestore.KeyValueManager
 import com.ligadata.KvBase.{ Key, Value, TimeRange, KvBaseDefalts }
 
 object NodeLevelTransService {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
   private[this] var startTxnRangeIdx: Long = 1
   private[this] var endTxnRangeIdx: Long = 0
   private[this] val _lock = new Object
@@ -196,7 +196,7 @@ object NodeLevelTransService {
 }
 
 class SimpleTransService {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
   private[this] var startTxnRangeIdx: Long = 1
   private[this] var endTxnRangeIdx: Long = 0
   private[this] var txnIdsRangeForPartition: Int = 1

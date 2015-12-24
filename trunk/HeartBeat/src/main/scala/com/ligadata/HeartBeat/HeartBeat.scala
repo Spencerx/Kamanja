@@ -16,7 +16,7 @@
 
 package com.ligadata.HeartBeat
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.ZooKeeper._
 import org.apache.curator.framework._
 import org.json4s._
@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods._
 import scala.actors.threadpool.{ Executors, ExecutorService }
 
 class HeartBeatUtil {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
   class MainInfo {
     var name: String = null
     var uniqueId: Long = 0

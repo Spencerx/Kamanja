@@ -18,7 +18,7 @@ package com.ligadata.Controller
 
 import com.ligadata.ZooKeeper.CreateClient
 import org.apache.curator.framework.CuratorFramework
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -29,7 +29,7 @@ import scala.collection.mutable.ArrayBuffer
  * Sample Aggregator Object
  */
 object SampleAggregator {
-  private val LOG = Logger.getLogger(getClass)
+  private val LOG = LogManager.getLogger(getClass)
   val aggs = new ArrayBuffer[SampleAggregator]()
   var aggsLock = new Object
   var zkConnectString: String = null
@@ -166,7 +166,7 @@ object SampleAggregator {
 
 class SampleAggregator  {
 
-  private val LOG = Logger.getLogger(getClass)
+  private val LOG = LogManager.getLogger(getClass)
   var lock: Object = new Object
   private var isLocked: Boolean = false
   var totalMsg: Long = 0

@@ -18,18 +18,18 @@ package com.ligadata.MetadataAPI.Utility
 
 import java.io.File
 
-import com.ligadata.MetadataAPI.MetadataAPIImpl
+import com.ligadata.MetadataAPI.{MetadataAPIImpl,ApiResult,ErrorCodeConstants}
 
 import scala.io.Source
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 /**
  * Created by dhaval on 8/7/15.
  */
 object ContainerService {
   private val userid: Option[String] = Some("metadataapi")
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   def addContainer(input: String): String ={
     var response = ""
@@ -159,22 +159,22 @@ object ContainerService {
 
   def getAllContainers: String ={
     var response = ""
+    var containerKeysList = ""
     try {
       val containerKeys: Array[String] = MetadataAPIImpl GetAllContainersFromCache(true, userid)
+
       if (containerKeys.length == 0) {
-        response = "Sorry, No containers are available in the Metadata"
+        var emptyAlert = "Sorry, No containers are available in the Metadata"
+        response=(new ApiResult(ErrorCodeConstants.Success, "ContainerService",null, emptyAlert)).toString
       } else {
-        var srno = 0
-        //println("List of messages:")
-        for (containerKey <- containerKeys) {
-          //srno += 1
-          //println("[" + srno + "] " + containerKey)
-          response += containerKey + "\n"
-        }
+
+        response= (new ApiResult(ErrorCodeConstants.Success, "ContainerService", containerKeys.mkString(", "), "Successfully retrieved all the messages")).toString
+
       }
     } catch {
       case e: Exception => {
         response = e.getStackTrace.toString
+        response= (new ApiResult(ErrorCodeConstants.Failure, "ContainerService",null, response)).toString
       }
     }
     response

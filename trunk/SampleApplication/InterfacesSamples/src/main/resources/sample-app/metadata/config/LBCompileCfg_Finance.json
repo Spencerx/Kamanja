@@ -1,6 +1,14 @@
 {
-    "LowBalanceAlert":{
-        "Dependencies":["kamanjabase_2.10-1.0.jar"],
-        "MessageAndContainers":["system.custalerthistory","system.custpreferences","system.globalpreferences","system.customerinfo", "system.transactionmsg"]
+    "LowBalanceAlert": {
+        "Dependencies": [
+            "kamanjabase_2.10-1.0.jar"
+        ],
+        "MessageAndContainers": [
+            "com.ligadata.kamanja.samples.containers.custalerthistory",
+            "com.ligadata.kamanja.samples.containers.custpreferences",
+            "com.ligadata.kamanja.samples.containers.globalpreferences",
+            "com.ligadata.kamanja.samples.containers.customerinfo",
+            "com.ligadata.kamanja.samples.messages.transactionmsg"
+        ]
     }
 }

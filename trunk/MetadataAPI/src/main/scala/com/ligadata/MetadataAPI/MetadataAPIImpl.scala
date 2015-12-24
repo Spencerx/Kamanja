@@ -52,7 +52,7 @@ import com.ligadata.messagedef._
 import com.ligadata.Exceptions._
 
 import scala.xml.XML
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -65,7 +65,7 @@ import org.apache.zookeeper.CreateMode
 import com.ligadata.keyvaluestore._
 import com.ligadata.Serialize._
 import com.ligadata.Utils._
-import util.control.Breaks._
+import scala.util.control.Breaks._
 import com.ligadata.AuditAdapterInfo._
 import com.ligadata.SecurityAdapterInfo.SecurityAdapter
 import com.ligadata.keyvaluestore.KeyValueManager
@@ -101,7 +101,7 @@ object MetadataAPIImpl extends MetadataAPI {
   lazy val sysNS = "System"
   // system name space
   lazy val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
   lazy val serializerType = "kryo"
   lazy val serializer = SerializerManager.GetSerializer(serializerType)
   lazy val metadataAPIConfig = new Properties()
@@ -120,6 +120,8 @@ object MetadataAPIImpl extends MetadataAPI {
   var zkHeartBeatNodePath = ""
   private val storageDefaultTime = 0L
   private val storageDefaultTxnId = 0L
+
+  def getCurrentTranLevel = currentTranLevel
 
   // For future debugging  purposes, we want to know which properties were not set - so create a set
   // of values that can be set via our config files
@@ -158,9 +160,26 @@ object MetadataAPIImpl extends MetadataAPI {
    *  @parm - nodeId: String - if no parameter specified, return health-check for all nodes
    */
   def getHealthCheck(nodeId: String = ""): String = {
-    val ids = parse(nodeId).values.asInstanceOf[List[String]]
-    var apiResult = new ApiResult(ErrorCodeConstants.Success, "GetHeartbeat", MonitorAPIImpl.getHeartbeatInfo(ids), ErrorCodeConstants.GetHeartbeat_Success)
-    apiResult.toString
+    try {
+      val ids = parse(nodeId).values.asInstanceOf[List[String]]
+      var apiResult = new ApiResultComplex(ErrorCodeConstants.Success, "GetHeartbeat", MonitorAPIImpl.getHeartbeatInfo(ids), ErrorCodeConstants.GetHeartbeat_Success)
+      apiResult.toString
+    }
+    catch {
+      case cce: java.lang.ClassCastException => {
+        val stackTrace = StackTrace.ThrowableTraceString(cce)
+        logger.warn("Failure processing GET_HEALTH_CHECK - cannot parse the list of desired nodes. \n" + stackTrace)
+        var apiResult = new ApiResult(ErrorCodeConstants.Failure, "GetHealthCheck", "No data available", ErrorCodeConstants.GetHeartbeat_Failed + " Error:Parsing Error")
+        return apiResult.toString
+      }
+      case e: Exception => {
+        var apiResult = new ApiResult(ErrorCodeConstants.Failure, "GetHealthCheck", "No data available", ErrorCodeConstants.GetHeartbeat_Failed + " Error: Unknown - see Kamanja Logs")
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        logger.error("Failure processing GET_HEALTH_CHECK - unknown  \n" + stackTrace)
+        return apiResult.toString
+      }
+    }
+
   }
 
   /**
@@ -391,7 +410,7 @@ object MetadataAPIImpl extends MetadataAPI {
       } catch {
         case e: Exception => {
           val stackTrace = StackTrace.ThrowableTraceString(e)
-          logger.debug("\nStackTrace:" + stackTrace)
+          logger.error("\nStackTrace:" + stackTrace)
           throw new UpdateStoreFailedException("Failed to save audit record" + aRec.toString + ":" + e.getMessage())
         }
       }
@@ -417,7 +436,7 @@ object MetadataAPIImpl extends MetadataAPI {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+        logger.error("\nStackTrace:" + stackTrace)
         var apiResult = new ApiResult(ErrorCodeConstants.Failure, "Failed to fetch all the audit objects:", null, "Error :" + e.toString)
         apiResultStr = apiResult.toString()
       }
@@ -560,10 +579,6 @@ object MetadataAPIImpl extends MetadataAPI {
     metadataAPIConfig
   }
 
-  def SetLoggerLevel(level: Level) {
-    logger.setLevel(level);
-  }
-
   private var mainDS: DataStore = _
 
   def GetMainDS: DataStore = mainDS
@@ -581,9 +596,9 @@ object MetadataAPIImpl extends MetadataAPI {
         throw new ObjectNotFoundException("Object %s not found in container %s".format(bucketKeyStr, containerName))
       objs(0)
     } catch {
-      case e: KeyNotFoundException => {
+      case e: ObjectNotFoundException => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("KeyNotFound Exception: Error => " + e.getMessage() + "\nStackTrace:" + stackTrace)
+        logger.debug("ObjectNotFound Exception: Error => " + e.getMessage() + "\nStackTrace:" + stackTrace)
         throw new ObjectNotFoundException(e.getMessage())
       }
       case e: Exception => {
@@ -849,7 +864,7 @@ object MetadataAPIImpl extends MetadataAPI {
       InitZooKeeper
       val znodePath = GetMetadataAPIConfig.getProperty("ZNODE_PATH") + "/metadataupdate"
       logger.debug("Set the data on the zookeeper node " + znodePath)
-        zkc.setData().forPath(znodePath, data)
+      zkc.setData().forPath(znodePath, data)
       PutTranId(objList(0).tranId)
     } catch {
       case e: Exception => {
@@ -867,8 +882,8 @@ object MetadataAPIImpl extends MetadataAPI {
       idStr.toLong + 1
     } catch {
       case e: ObjectNotFoundException => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+        //val stackTrace = StackTrace.ThrowableTraceString(e)
+        //logger.debug("\nStackTrace:" + stackTrace)
         // first time
         1
       }
@@ -887,8 +902,8 @@ object MetadataAPIImpl extends MetadataAPI {
       idStr.toLong
     } catch {
       case e: ObjectNotFoundException => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+        //val stackTrace = StackTrace.ThrowableTraceString(e)
+        //logger.debug("\nStackTrace:" + stackTrace)
         // first time
         0
       }
@@ -1178,7 +1193,7 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def PutArrayOfBytesToJar(ba: Array[Byte], jarName: String) = {
-    logger.debug("Downloading the jar contents into the file " + jarName)
+    logger.info("Downloading the jar contents into the file " + jarName)
     try {
       val iFile = new File(jarName)
       val bos = new BufferedOutputStream(new FileOutputStream(iFile));
@@ -1368,6 +1383,11 @@ object MetadataAPIImpl extends MetadataAPI {
         true
       }
     } catch {
+      case e: ObjectNotFoundException => {
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        logger.debug("\nStackTrace:" + stackTrace)
+        true
+      }
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
         logger.debug("\nStackTrace:" + stackTrace)
@@ -1408,6 +1428,7 @@ object MetadataAPIImpl extends MetadataAPI {
       }
       var allJars = GetDependantJars(obj)
       logger.debug("Found " + allJars.length + " dependant jars. Jars:" + allJars.mkString(","))
+      logger.info("Found " + allJars.length + " dependant jars. It make take several minutes first time to download all of these jars:" + allJars.mkString(","))
       if (allJars.length > 0) {
         val tmpJarPaths = MetadataAPIImpl.GetMetadataAPIConfig.getProperty("JAR_PATHS")
         val jarPaths = if (tmpJarPaths != null) tmpJarPaths.split(",").toSet else scala.collection.immutable.Set[String]()
@@ -1437,6 +1458,8 @@ object MetadataAPIImpl extends MetadataAPI {
               val ba = mObj.serializedInfo
               val jarName = dirPath + "/" + jar
               PutArrayOfBytesToJar(ba, jarName)
+            } else {
+              logger.info("The jar " + curJar + " was already downloaded... ")
             }
           } catch {
             case e: Exception => {
@@ -1756,11 +1779,8 @@ object MetadataAPIImpl extends MetadataAPI {
       logger.debug("Getting DB Connection for dataStoreInfo:%s".format(dataStoreInfo))
       return KeyValueManager.Get(jarPaths, dataStoreInfo)
     } catch {
-      case e: Exception => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
-        throw new CreateStoreFailedException(e.getMessage())
-      }
+      case e: Exception => throw e
+      case e: Throwable => throw e
     }
   }
 
@@ -1783,15 +1803,40 @@ object MetadataAPIImpl extends MetadataAPI {
         "model_config_objects" -> ("model_config_objects", mainDS),
         "transaction_id" -> ("transaction_id", mainDS))
     } catch {
-      case e: CreateStoreFailedException => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+      case e: FatalAdapterException => {
+        val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        throw new CreateStoreFailedException(e.getMessage())
+      }
+      case e: StorageConnectionException => {
+        val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        throw new CreateStoreFailedException(e.getMessage())
+      }
+      case e: StorageFetchException => {
+        val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        throw new CreateStoreFailedException(e.getMessage())
+      }
+      case e: StorageDMLException => {
+        val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        throw new CreateStoreFailedException(e.getMessage())
+      }
+      case e: StorageDDLException => {
+        val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
         throw new CreateStoreFailedException(e.getMessage())
       }
       case e: Exception => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
-        throw new CreateStoreFailedException(e.getMessage() + "\nStackTrace:" + stackTrace)
+        val causeStackTrace = StackTrace.ThrowableTraceString(e)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        throw new CreateStoreFailedException(e.getMessage())
+      }
+      case e: Throwable => {
+        val causeStackTrace = StackTrace.ThrowableTraceString(e)
+        logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        throw new CreateStoreFailedException(e.getMessage())
       }
     }
   }
@@ -1807,7 +1852,7 @@ object MetadataAPIImpl extends MetadataAPI {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+        logger.error("\nStackTrace:" + stackTrace)
         throw e;
       }
     }
@@ -1820,7 +1865,7 @@ object MetadataAPIImpl extends MetadataAPI {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+        logger.error("\nStackTrace:" + stackTrace)
         throw e;
       }
     }
@@ -1835,7 +1880,7 @@ object MetadataAPIImpl extends MetadataAPI {
     } catch {
       case e: Exception => {
         val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
+        logger.error("\nStackTrace:" + stackTrace)
         throw e;
       }
     }
@@ -3768,7 +3813,7 @@ object MetadataAPIImpl extends MetadataAPI {
           processedContainersSet += storeInfo._1
           storeInfo._2.getKeys(storeInfo._1, { (key: Key) =>
             {
-              val strKey = key.bucketKey(0)
+              val strKey = key.bucketKey.mkString(".")
               val i = strKey.indexOf(".")
               val objType = strKey.substring(0, i)
               val typeName = strKey.substring(i + 1)
@@ -3835,8 +3880,7 @@ object MetadataAPIImpl extends MetadataAPI {
       val storeInfo = tableStoreMap("config_objects")
       storeInfo._2.get(storeInfo._1, { (k: Key, v: Value) =>
         {
-          //logger.debug("key => " + KeyAsStr(key))
-          val strKey = k.bucketKey(0)
+          val strKey = k.bucketKey.mkString(".")
           val i = strKey.indexOf(".")
           val objType = strKey.substring(0, i)
           val typeName = strKey.substring(i + 1)
@@ -3895,7 +3939,7 @@ object MetadataAPIImpl extends MetadataAPI {
       {
         processed += 1
         val conf = serializer.DeserializeObjectFromByteArray(v.serializedInfo).asInstanceOf[Map[String, List[String]]]
-        MdMgr.GetMdMgr.AddModelConfig(k.bucketKey(0), conf)
+        MdMgr.GetMdMgr.AddModelConfig(k.bucketKey.mkString("."), conf)
       }
     })
 
@@ -4505,7 +4549,7 @@ object MetadataAPIImpl extends MetadataAPI {
 
   // A single concept as a string using name and version as the key
   def GetConceptDef(nameSpace: String, objectName: String, formatType: String,
-    version: String, userid: Option[String]): String = {
+                    version: String, userid: Option[String]): String = {
     ConceptUtils.GetConceptDef(nameSpace, objectName, formatType, version, userid)
   }
 
@@ -4552,10 +4596,10 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def AddNode(nodeId: String, nodePort: Int, nodeIpAddr: String,
-    jarPaths: List[String], scala_home: String,
-    java_home: String, classpath: String,
-    clusterId: String, power: Int,
-    roles: Array[String], description: String): String = {
+              jarPaths: List[String], scala_home: String,
+              java_home: String, classpath: String,
+              clusterId: String, power: Int,
+              roles: Array[String], description: String): String = {
     try {
       // save in memory
       val ni = MdMgr.GetMdMgr.MakeNode(nodeId, nodePort, nodeIpAddr, jarPaths, scala_home,
@@ -4578,10 +4622,10 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def UpdateNode(nodeId: String, nodePort: Int, nodeIpAddr: String,
-    jarPaths: List[String], scala_home: String,
-    java_home: String, classpath: String,
-    clusterId: String, power: Int,
-    roles: Array[String], description: String): String = {
+                 jarPaths: List[String], scala_home: String,
+                 java_home: String, classpath: String,
+                 clusterId: String, power: Int,
+                 roles: Array[String], description: String): String = {
     AddNode(nodeId, nodePort, nodeIpAddr, jarPaths, scala_home,
       java_home, classpath,
       clusterId, power, roles, description)
@@ -4603,8 +4647,8 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def AddAdapter(name: String, typeString: String, dataFormat: String, className: String,
-    jarName: String, dependencyJars: List[String],
-    adapterSpecificCfg: String, inputAdapterToVerify: String, keyAndValueDelimiter: String, fieldDelimiter: String, valueDelimiter: String, associatedMsg: String): String = {
+                 jarName: String, dependencyJars: List[String],
+                 adapterSpecificCfg: String, inputAdapterToVerify: String, keyAndValueDelimiter: String, fieldDelimiter: String, valueDelimiter: String, associatedMsg: String): String = {
     try {
       // save in memory
       val ai = MdMgr.GetMdMgr.MakeAdapter(name, typeString, dataFormat, className, jarName,
@@ -4627,8 +4671,8 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def UpdateAdapter(name: String, typeString: String, dataFormat: String, className: String,
-    jarName: String, dependencyJars: List[String],
-    adapterSpecificCfg: String, inputAdapterToVerify: String, keyAndValueDelimiter: String, fieldDelimiter: String, valueDelimiter: String, associatedMsg: String): String = {
+                    jarName: String, dependencyJars: List[String],
+                    adapterSpecificCfg: String, inputAdapterToVerify: String, keyAndValueDelimiter: String, fieldDelimiter: String, valueDelimiter: String, associatedMsg: String): String = {
     AddAdapter(name, typeString, dataFormat, className, jarName, dependencyJars, adapterSpecificCfg, inputAdapterToVerify, keyAndValueDelimiter, fieldDelimiter, valueDelimiter, associatedMsg)
   }
 
@@ -4692,7 +4736,7 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def AddClusterCfg(clusterCfgId: String, cfgMap: scala.collection.mutable.HashMap[String, String],
-    modifiedTime: Date, createdTime: Date): String = {
+                    modifiedTime: Date, createdTime: Date): String = {
     try {
       // save in memory
       val ci = MdMgr.GetMdMgr.MakeClusterCfg(clusterCfgId, cfgMap, modifiedTime, createdTime)
@@ -4714,7 +4758,7 @@ object MetadataAPIImpl extends MetadataAPI {
   }
 
   def UpdateClusterCfg(clusterCfgId: String, cfgMap: scala.collection.mutable.HashMap[String, String],
-    modifiedTime: Date, createdTime: Date): String = {
+                       modifiedTime: Date, createdTime: Date): String = {
     AddClusterCfg(clusterCfgId, cfgMap, modifiedTime, createdTime)
   }
 
@@ -5745,7 +5789,7 @@ object MetadataAPIImpl extends MetadataAPI {
     MetadataAPIImpl.CloseDbStore
     MetadataAPIImpl.InitSecImpl
     if (startHB) InitHearbeat
-    initZkListeners
+    initZkListeners(startHB)
   }
 
   def InitMdMgrFromBootStrap(configFile: String, startHB: Boolean) {
@@ -5759,7 +5803,7 @@ object MetadataAPIImpl extends MetadataAPI {
       MetadataAPIImpl.readMetadataAPIConfigFromPropertiesFile(configFile)
     }
 
-    initZkListeners
+    initZkListeners(startHB)
     val tmpJarPaths = MetadataAPIImpl.GetMetadataAPIConfig.getProperty("JAR_PATHS")
     val jarPaths = if (tmpJarPaths != null) tmpJarPaths.split(",").toSet else scala.collection.immutable.Set[String]()
     MetadataAPIImpl.OpenDbStore(jarPaths, GetMetadataAPIConfig.getProperty("METADATA_DATASTORE"))
@@ -5785,7 +5829,7 @@ object MetadataAPIImpl extends MetadataAPI {
   /**
    * Create a listener to monitor Meatadata Cache
    */
-  def initZkListeners: Unit = {
+  def initZkListeners(startHB: Boolean): Unit = {
     // Set up a zk listener for metadata invalidation   metadataAPIConfig.getProperty("AUDIT_IMPL_CLASS").trim
     var znodePath = metadataAPIConfig.getProperty("ZNODE_PATH")
     var hbPathEngine = znodePath
@@ -5803,8 +5847,10 @@ object MetadataAPIImpl extends MetadataAPI {
         CreateClient.CreateNodeIfNotExists(zkConnectString, znodePath)
         zkListener = new ZooKeeperListener
         zkListener.CreateListener(zkConnectString, znodePath, UpdateMetadata, 3000, 3000)
-        zkListener.CreatePathChildrenCacheListener(zkConnectString, hbPathEngine, true, MonitorAPIImpl.updateHeartbeatInfo, 3000, 3000)
-        zkListener.CreatePathChildrenCacheListener(zkConnectString, hbPathMetadata, true, MonitorAPIImpl.updateHeartbeatInfo, 3000, 3000)
+        if (startHB) {
+          zkListener.CreatePathChildrenCacheListener(zkConnectString, hbPathEngine, true, MonitorAPIImpl.updateHeartbeatInfo, 3000, 3000)
+          zkListener.CreatePathChildrenCacheListener(zkConnectString, hbPathMetadata, true, MonitorAPIImpl.updateHeartbeatInfo, 3000, 3000)
+        }
       } catch {
         case e: Exception => {
           logger.error("Failed to initialize ZooKeeper Connection. Reason:%s Message:%s".format(e.getCause, e.getMessage))
@@ -5876,7 +5922,6 @@ object MetadataAPIImpl extends MetadataAPI {
    */
   def InitMdMgr(mgr: MdMgr, jarPathsInfo: String, databaseInfo: String) {
 
-    SetLoggerLevel(Level.INFO)
     val mdLoader = new MetadataLoad(mgr, "", "", "", "")
     mdLoader.initialize
 

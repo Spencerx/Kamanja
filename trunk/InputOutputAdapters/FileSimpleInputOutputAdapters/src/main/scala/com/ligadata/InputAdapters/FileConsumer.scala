@@ -17,7 +17,7 @@
 package com.ligadata.InputAdapters
 
 import scala.actors.threadpool.{ Executors, ExecutorService }
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import java.io.{ InputStream, FileInputStream }
 import java.util.zip.GZIPInputStream
 import java.nio.file.{ Paths, Files }
@@ -32,7 +32,7 @@ object FileConsumer extends InputAdapterObj {
 }
 
 class FileConsumer(val inputConfig: AdapterConfiguration, val callerCtxt: InputAdapterCallerContext, val execCtxtObj: ExecContextObj, cntrAdapter: CountersAdapter) extends InputAdapter {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
 
   private[this] val fc = FileAdapterConfiguration.GetAdapterConfig(inputConfig)
   private[this] var uniqueKey: FilePartitionUniqueRecordKey = new FilePartitionUniqueRecordKey

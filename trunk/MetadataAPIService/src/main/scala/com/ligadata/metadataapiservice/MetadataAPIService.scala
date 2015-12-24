@@ -22,7 +22,7 @@ import com.ligadata.metadataapiservice._
 import spray.routing._
 import spray.http._
 import MediaTypes._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.MetadataAPI._
 import com.ligadata.Serialize._
 
@@ -50,7 +50,7 @@ trait MetadataAPIService extends HttpService {
   val GET_HEALTH = "heartbeat"
 
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   // logger.setLevel(Level.TRACE);
 
   val metadataAPIRoute = {
@@ -68,7 +68,10 @@ trait MetadataAPIService extends HttpService {
               path("api" / Rest) { str => {
                 val toknRoute = str.split("/")
                 logger.debug("GET reqeust : api/" + str)
-                if (toknRoute.size == 1) {
+
+                if (!isUrlSuffix(str)) {
+                  requestContext => requestContext.complete((new ApiResult(ErrorCodeConstants.Failure, APIName, null, "Unknown GET route")).toString)
+                } else if (toknRoute.size == 1) {
                   if (toknRoute(0).equalsIgnoreCase(AUDIT_LOG_TOKN)) {
                     requestContext => processGetAuditLogRequest(null, requestContext, user, password, role)
                   }
@@ -436,9 +439,21 @@ trait MetadataAPIService extends HttpService {
         rContext.complete((new ApiResult(ErrorCodeConstants.Failure, APIName, null, "Invalid key: " + objKey)).toString)
         return null
       }
+      case iae: com.ligadata.Exceptions.InvalidArgumentException => {
+        logger.debug("METADATASERVICE: Invalid key " + objKey)
+        rContext.complete((new ApiResult(ErrorCodeConstants.Failure, APIName, null, "Invalid key: " + objKey)).toString)
+        return null
+      }
     }
   }
 
+  private def isUrlSuffix(str: String): Boolean = {
+    if ((str == null) ||
+      ((str != null) && (str.size == 0))) {
+      return false
+    }
+    return true
+  }
   /**
    * MakeJsonStrForArgList
    */

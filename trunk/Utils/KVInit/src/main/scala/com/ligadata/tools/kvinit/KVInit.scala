@@ -29,7 +29,7 @@ import java.io.InputStream
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.keyvaluestore._
 import com.ligadata.KamanjaBase._
 import com.ligadata.kamanja.metadataload.MetadataLoad
@@ -60,7 +60,7 @@ import com.ligadata.Exceptions._
 
 trait LogTrait {
   val loggerName = this.getClass.getName()
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 }
 
 object KVInit extends App with LogTrait {
@@ -145,6 +145,12 @@ Sample uses:
     val valueDelimiter = if (options.contains('valuedelimiter)) options.apply('valuedelimiter) else null
     var ignoreerrors = (if (options.contains('ignoreerrors)) options.apply('ignoreerrors) else "0").trim
     val format = (if (options.contains('format)) options.apply('format) else "delimited").trim.toLowerCase()
+    var commitBatchSize = (if (options.contains('commitbatchsize)) options.apply('commitbatchsize) else "10000").trim.toInt
+
+    if (commitBatchSize <= 0) {
+      logger.error("commitbatchsize must be greater than 0")
+      return
+    }
 
     val fieldDelimiter = if (fieldDelimiter1 != null) fieldDelimiter1 else delimiterString
 
@@ -187,20 +193,54 @@ Sample uses:
 
       KvInitConfiguration.configFile = cfgfile.toString
 
-      val kvmaker: KVInit = new KVInit(loadConfigs, typename.toLowerCase, dataFiles, keyfieldnames, keyAndValueDelimiter, fieldDelimiter, valueDelimiter, ignoreerrors, ignoreRecords, format)
+      val kvmaker: KVInit = new KVInit(loadConfigs, typename.toLowerCase, dataFiles, keyfieldnames, keyAndValueDelimiter, fieldDelimiter, valueDelimiter, ignoreerrors, ignoreRecords, format, commitBatchSize)
       if (kvmaker.isOk) {
-        val dstore = kvmaker.GetDataStoreHandle(KvInitConfiguration.jarPaths, kvmaker.dataDataStoreInfo)
-        if (dstore != null) {
-          try {
-            kvmaker.buildContainerOrMessage(dstore)
-          } catch {
-            case e: Exception => {
-              val stackTrace = StackTrace.ThrowableTraceString(e)
-              logger.error("Failed to build Container or Message." + "\nStackTrace:" + stackTrace)
+        try {
+          val dstore = kvmaker.GetDataStoreHandle(KvInitConfiguration.jarPaths, kvmaker.dataDataStoreInfo)
+          if (dstore != null) {
+            try {
+              kvmaker.buildContainerOrMessage(dstore)
+            } catch {
+              case e: Exception => {
+                val stackTrace = StackTrace.ThrowableTraceString(e)
+                logger.error("Failed to build Container or Message." + "\nStackTrace:" + stackTrace)
+              }
+            } finally {
+              if (dstore != null)
+                dstore.Shutdown()
+              com.ligadata.transactions.NodeLevelTransService.Shutdown
+              if (kvmaker.zkcForSetData != null)
+                kvmaker.zkcForSetData.close()
             }
-          } finally {
-            if (dstore != null)
-              dstore.Shutdown()
+          }
+        } catch {
+          case e: FatalAdapterException => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+          }
+          case e: StorageConnectionException => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+          }
+          case e: StorageFetchException => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+          }
+          case e: StorageDMLException => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+          }
+          case e: StorageDDLException => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+          }
+          case e: Exception => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+          }
+          case e: Throwable => {
+            val causeStackTrace = StackTrace.ThrowableTraceString(e)
+            logger.error("Failed to connect to Datastore. Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
           }
         }
       }
@@ -220,7 +260,7 @@ object KvInitConfiguration {
 }
 
 class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: Array[String], val keyfieldnames: Array[String], keyAndValueDelimiter1: String,
-  fieldDelimiter1: String, valueDelimiter1: String, ignoreerrors: String, ignoreRecords: Int, format: String) extends LogTrait with MdBaseResolveInfo {
+             fieldDelimiter1: String, valueDelimiter1: String, ignoreerrors: String, ignoreRecords: Int, format: String, commitBatchSize: Int) extends LogTrait with MdBaseResolveInfo {
   val fieldDelimiter = if (DataDelimiters.IsEmptyDelimiter(fieldDelimiter1) == false) fieldDelimiter1 else ","
   val keyAndValueDelimiter = if (DataDelimiters.IsEmptyDelimiter(keyAndValueDelimiter1) == false) keyAndValueDelimiter1 else "\\x01"
   val valueDelimiter = if (DataDelimiters.IsEmptyDelimiter(valueDelimiter1) == false) valueDelimiter1 else "~"
@@ -231,6 +271,8 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
   val isDelimited = format.equals("delimited")
   val isJson = format.equals("json")
   val isKv = format.equals("kv")
+  var zkcForSetData: CuratorFramework = null
+  var totalCommittedMsgs: Int = 0
 
   val kvInitLoader = new KamanjaLoaderInfo
 
@@ -478,11 +520,8 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
       logger.debug("Getting DB Connection for dataStoreInfo:%s".format(dataStoreInfo))
       return KeyValueManager.Get(jarPaths, dataStoreInfo)
     } catch {
-      case e: Exception => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.debug("\nStackTrace:" + stackTrace)
-        throw new Exception(e.getMessage())
-      }
+      case e: Exception => throw e
+      case e: Throwable => throw e
     }
   }
 
@@ -581,17 +620,161 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
     val buildOne = (k: Key, v: Value) => {
       collectKeyAndValues(k, v, dataByBucketKeyPart, loadedKeys)
     }
-    try {
-      kvstore.get(objFullName, Array(loadKey.tmRange), Array(loadKey.bucketKey), buildOne)
-      loadedKeys.add(loadKey)
-    } catch {
-      case e: ObjectNotFoundException => {
-        logger.debug("Key %s Not found for timerange: %d-%d".format(loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime))
+
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneGet = false
+
+    while (!doneGet) {
+      try {
+        kvstore.get(objFullName, Array(loadKey.tmRange), Array(loadKey.bucketKey), buildOne)
+        loadedKeys.add(loadKey)
+        doneGet = true
+      } catch {
+        case e @ (_: ObjectNotFoundException | _: KeyNotFoundException) => {
+          logger.debug("In Container %s Key %s Not found for timerange: %d-%d".format(objFullName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime))
+          doneGet = true
+        }
+        case e: FatalAdapterException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("In Container %s Key %s Not found for timerange: %d-%d.\nStackTrace:%s".format(objFullName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime, stackTrace))
+        }
+        case e: StorageDMLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("In Container %s Key %s Not found for timerange: %d-%d.\nStackTrace:%s".format(objFullName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime, stackTrace))
+        }
+        case e: StorageDDLException => {
+          val stackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("In Container %s Key %s Not found for timerange: %d-%d.\nStackTrace:%s".format(objFullName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime, stackTrace))
+        }
+        case e: Exception => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("In Container %s Key %s Not found for timerange: %d-%d.\nStackTrace:%s".format(objFullName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime, stackTrace))
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("In Container %s Key %s Not found for timerange: %d-%d.\nStackTrace:%s".format(objFullName, loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime, stackTrace))
+        }
       }
-      case e: Exception => {
-        val stackTrace = StackTrace.ThrowableTraceString(e)
-        logger.error("Key %s Not found for timerange: %d-%d.\nStackTrace:%s".format(loadKey.bucketKey.mkString(","), loadKey.tmRange.beginTime, loadKey.tmRange.endTime, stackTrace))
+
+      if (!doneGet) {
+        try {
+          logger.error("Failed to get data from datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
       }
+    }
+  }
+
+  private def commitData(transId: Long, kvstore: DataStore, dataByBucketKeyPart: TreeMap[KeyWithBucketIdAndPrimaryKey, MessageContainerBaseWithModFlag], commitBatchSize: Int, processedRows: Int): Unit = {
+    val storeObjects = new ArrayBuffer[(Key, Value)](dataByBucketKeyPart.size())
+    var it1 = dataByBucketKeyPart.entrySet().iterator()
+    while (it1.hasNext()) {
+      val entry = it1.next();
+
+      val value = entry.getValue();
+      if (value.modified) {
+        val key = entry.getKey();
+        try {
+          val k = entry.getKey().key
+          val v = Value("manual", SerializeDeserialize.Serialize(value.value))
+          storeObjects += ((k, v))
+        } catch {
+          case e: Exception => {
+            logger.error("Failed to serialize/write data.")
+            throw e
+          }
+        }
+      }
+    }
+
+    var failedWaitTime = 15000 // Wait time starts at 15 secs
+    val maxFailedWaitTime = 60000 // Max Wait time 60 secs
+    var doneSave = false
+
+    while (!doneSave) {
+      try {
+        kvstore.put(Array((objFullName, storeObjects.toArray)))
+        doneSave = true
+      } catch {
+        case e: FatalAdapterException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: StorageDMLException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: StorageDDLException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: Exception => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+        case e: Throwable => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e)
+          logger.error("Failed to save data into datastore, cause: \n" + causeStackTrace)
+        }
+      }
+
+      if (!doneSave) {
+        try {
+          logger.error("Failed to save data into datastore. Waiting for another %d milli seconds and going to start them again.".format(failedWaitTime))
+          Thread.sleep(failedWaitTime)
+        } catch {
+          case e: Exception => {}
+        }
+        // Adjust time for next time
+        if (failedWaitTime < maxFailedWaitTime) {
+          failedWaitTime = failedWaitTime * 2
+          if (failedWaitTime > maxFailedWaitTime)
+            failedWaitTime = maxFailedWaitTime
+        }
+      }
+    }
+
+    val savedKeys = storeObjects.map(kv => kv._1)
+
+    totalCommittedMsgs += storeObjects.size
+
+    val msgStr = "%s: Inserted %d keys in this commit. Totals (Processed:%d, inserted:%d) so far".format(GetCurDtTmStr, storeObjects.size, processedRows, totalCommittedMsgs)
+    logger.info(msgStr)
+    println(msgStr)
+
+    if (zkcForSetData != null) {
+      logger.info("Notifying Engines after updating is done through Zookeeper.")
+      try {
+        val dataChangeZkNodePath = zkNodeBasePath + "/datachange"
+        val changedContainersData = Map[String, List[Key]]()
+        changedContainersData(typename) = savedKeys.toList
+        val datachangedata = ("txnid" -> transId.toString) ~
+          ("changeddatakeys" -> changedContainersData.map(kv =>
+            ("C" -> kv._1) ~
+              ("K" -> kv._2.map(k =>
+                ("tm" -> k.timePartition) ~
+                  ("bk" -> k.bucketKey.toList) ~
+                  ("tx" -> k.transactionId) ~
+                  ("rid" -> k.rowId)))))
+        val sendJson = compact(render(datachangedata))
+        zkcForSetData.setData().forPath(dataChangeZkNodePath, sendJson.getBytes("UTF8"))
+      } catch {
+        case e: Exception => {
+          logger.error("Failed to send update notification to engine.")
+          throw e
+        }
+      }
+    } else {
+      logger.error("Failed to send update notification to engine.")
     }
   }
 
@@ -614,26 +797,35 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
 
     var hasPrimaryKey = false
     var triedForPrimaryKey = false
+    var transService: com.ligadata.transactions.SimpleTransService = null
+
+    if (zkConnectString != null && zkNodeBasePath != null && zkConnectString.size > 0 && zkNodeBasePath.size > 0) {
+      try {
+        // TransactionId
+        com.ligadata.transactions.NodeLevelTransService.init(zkConnectString, zkSessionTimeoutMs, zkConnectionTimeoutMs, zkNodeBasePath, 1, dataDataStoreInfo, KvInitConfiguration.jarPaths)
+        transService = new com.ligadata.transactions.SimpleTransService
+        transService.init(1)
+        transId = transService.getNextTransId // Getting first transaction. It may get wasted if we don't have any lines to save.
+
+        // ZK notifications
+        val dataChangeZkNodePath = zkNodeBasePath + "/datachange"
+        CreateClient.CreateNodeIfNotExists(zkConnectString, dataChangeZkNodePath) // Creating path if missing
+        zkcForSetData = CreateClient.createSimple(zkConnectString, zkSessionTimeoutMs, zkConnectionTimeoutMs)
+      } catch {
+        case e: Exception => throw e
+      }
+    }
 
     dataFiles.foreach(fl => {
+      logger.info("%s: File:%s => About to process".format(GetCurDtTmStr, fl))
       val alldata: List[String] = fileData(fl, format)
+      logger.info("%s: File:%s => Lines in file:%d".format(GetCurDtTmStr, fl, alldata.size))
 
-      if (alldata.size > ignoreRecords && zkConnectString != null && zkNodeBasePath != null && zkConnectString.size > 0 && zkNodeBasePath.size > 0) {
-        try {
-          com.ligadata.transactions.NodeLevelTransService.init(zkConnectString, zkSessionTimeoutMs, zkConnectionTimeoutMs, zkNodeBasePath, 1, dataDataStoreInfo, KvInitConfiguration.jarPaths)
-          val transService = new com.ligadata.transactions.SimpleTransService
-          transService.init(1)
-          transId = transService.getNextTransId
-        } catch {
-          case e: Exception => throw e
-        } finally {
-          com.ligadata.transactions.NodeLevelTransService.Shutdown
-        }
-      }
+      var lnNo = 0
 
-      for (i <- ignoreRecords until alldata.size) {
-        val inputStr = alldata(i)
-        if (inputStr.size > 0) {
+      alldata.foreach(inputStr => {
+        lnNo += 1
+        if (lnNo > ignoreRecords && inputStr.size > 0) {
           logger.debug("Record:" + inputStr)
 
           /** if we can make one ... we add the data to the store. This will crash if the data is bad */
@@ -706,6 +898,17 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
 
                 dataByBucketKeyPart.put(k, MessageContainerBaseWithModFlag(true, messageOrContainer))
                 processedRows += 1
+                if (processedRows % commitBatchSize == 0) {
+                  logger.info("%s: Collected batch (%d) of values. About to insert".format(GetCurDtTmStr, commitBatchSize))
+                  // Get transaction and commit them
+                  commitData(transId, kvstore, dataByBucketKeyPart, commitBatchSize, processedRows)
+                  dataByBucketKeyPart.clear()
+                  loadedKeys.clear()
+                  // Getting new transactionid for next batch
+                  transId = transService.getNextTransId
+                  logger.info("%s: Inserted batch (%d) of values. Total processed so far:%d".format(GetCurDtTmStr, commitBatchSize, processedRows))
+
+                }
               } catch {
                 case e: Exception => {
                   val stackTrace = StackTrace.ThrowableTraceString(e)
@@ -715,84 +918,25 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
               }
             }
           }
-        }
 
-        if (errsCnt > ignoreErrsCount) {
-          val errStr = "Populate/Serialize errors (%d) exceed the given count(%d)." format (errsCnt, ignoreErrsCount)
-          logger.error(errStr)
-          throw new Exception(errStr)
-        }
-      }
-    })
-
-    val storeObjects = new ArrayBuffer[(Key, Value)](dataByBucketKeyPart.size())
-    var it1 = dataByBucketKeyPart.entrySet().iterator()
-    while (it1.hasNext()) {
-      val entry = it1.next();
-
-      val value = entry.getValue();
-      if (value.modified) {
-        val key = entry.getKey();
-        try {
-          val k = entry.getKey().key
-          val v = Value("manual", SerializeDeserialize.Serialize(value.value))
-          storeObjects += ((k, v))
-        } catch {
-          case e: Exception => {
-            logger.error("Failed to serialize/write data.")
-            throw e
+          if (errsCnt > ignoreErrsCount) {
+            val errStr = "Populate/Serialize errors (%d) exceed the given count(%d)." format (errsCnt, ignoreErrsCount)
+            logger.error(errStr)
+            throw new Exception(errStr)
           }
         }
-      }
-    }
-
-    try {
-      logger.debug("Going to save " + storeObjects.size + " objects")
-      storeObjects.foreach(kv => {
-        logger.debug("ObjKey:(" + kv._1.timePartition + ":" + kv._1.bucketKey.mkString(",") + ":" + kv._1.transactionId + ") Value Size: " + kv._2.serializedInfo.size)
       })
-      kvstore.put(Array((objFullName, storeObjects.toArray)))
-    } catch {
-      case e: Exception => {
-        logger.error("Failed to write data")
-        throw e
-      }
+    })
+
+    if (dataByBucketKeyPart.size > 0) {
+      commitData(transId, kvstore, dataByBucketKeyPart, commitBatchSize, processedRows)
+      dataByBucketKeyPart.clear()
+      loadedKeys.clear()
     }
 
-    val savedKeys = storeObjects.map(kv => kv._1)
-
-    logger.info("Processed %d records and Inserted %d keys for Type %s".format(processedRows, storeObjects.size, typename))
-    println("Processed %d records and Inserted %d keys for Type %s".format(processedRows, storeObjects.size, typename))
-
-    if (zkConnectString != null && zkNodeBasePath != null && zkConnectString.size > 0 && zkNodeBasePath.size > 0) {
-      logger.info("Notifying Engines after updating is done through Zookeeper.")
-      var zkcForSetData: CuratorFramework = null
-      try {
-        val dataChangeZkNodePath = zkNodeBasePath + "/datachange"
-        CreateClient.CreateNodeIfNotExists(zkConnectString, dataChangeZkNodePath) // Creating 
-        zkcForSetData = CreateClient.createSimple(zkConnectString, zkSessionTimeoutMs, zkConnectionTimeoutMs)
-        val changedContainersData = Map[String, List[Key]]()
-        changedContainersData(typename) = savedKeys.toList
-        val datachangedata = ("txnid" -> transId.toString) ~
-          ("changeddatakeys" -> changedContainersData.map(kv =>
-            ("C" -> kv._1) ~
-              ("K" -> kv._2.map(k =>
-                ("tm" -> k.timePartition) ~
-                  ("bk" -> k.bucketKey.toList) ~
-                  ("tx" -> k.transactionId)))))
-        val sendJson = compact(render(datachangedata))
-        zkcForSetData.setData().forPath(dataChangeZkNodePath, sendJson.getBytes("UTF8"))
-      } catch {
-        case e: Exception => {
-          logger.error("Failed to send update notification to engine.")
-        }
-      } finally {
-        if (zkcForSetData != null)
-          zkcForSetData.close
-      }
-    } else {
-      logger.error("Failed to send update notification to engine.")
-    }
+    val msgStr = "%s: Processed %d records and Inserted %d keys total for Type %s".format(GetCurDtTmStr, processedRows, totalCommittedMsgs, typename)
+    logger.info(msgStr)
+    println(msgStr)
   }
 
   private def fileData(inputeventfile: String, format: String): List[String] = {
@@ -918,6 +1062,15 @@ class KVInit(val loadConfigs: Properties, val typename: String, val dataFiles: A
     return (head == GZIPInputStream.GZIP_MAGIC);
   }
 
+  private val formatter = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
+
+  private def SimpDateFmtTimeFromMs(tmMs: Long): String = {
+    formatter.format(new java.util.Date(tmMs))
+  }
+
+  private def GetCurDtTmStr: String = {
+    SimpDateFmtTimeFromMs(System.currentTimeMillis)
+  }
 }
 
 

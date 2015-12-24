@@ -19,7 +19,7 @@ package com.ligadata.ExtractData
 import scala.reflect.runtime.universe
 import scala.collection.mutable.ArrayBuffer
 import java.util.Properties
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import java.io.{ OutputStream, FileOutputStream, File, BufferedWriter, Writer, PrintWriter }
 import java.util.zip.GZIPOutputStream
 import java.nio.file.{ Paths, Files }
@@ -43,7 +43,7 @@ import java.util.Date
 import java.text.SimpleDateFormat
 
 object ExtractData extends MdBaseResolveInfo {
-  private val LOG = Logger.getLogger(getClass);
+  private val LOG = LogManager.getLogger(getClass);
   private val clsLoaderInfo = new KamanjaLoaderInfo
   private var _currentMessageObj: BaseMsgObj = null
   private var _currentContainerObj: BaseContainerObj = null

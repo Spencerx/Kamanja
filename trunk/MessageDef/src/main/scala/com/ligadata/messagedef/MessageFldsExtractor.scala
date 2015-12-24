@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.ligadata.kamanja.metadata.StructTypeDef
 import com.ligadata.kamanja.metadata.AttributeDef
 import com.ligadata.kamanja.metadata.MappedMsgTypeDef
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Exceptions.StackTrace
 
 class MessageFldsExtractor {
@@ -40,7 +40,7 @@ class MessageFldsExtractor {
   var cnstObjVar = new ConstantMsgObjVarGenerator
 
   val logger = this.getClass.getName
-  lazy val log = Logger.getLogger(logger)
+  lazy val log = LogManager.getLogger(logger)
 
   //generates the variables string and assign string
   def classStr(message: Message, mdMgr: MdMgr, recompile: Boolean): (Array[String], Int, List[(String, String)], List[(String, String, String, String, Boolean, String)], Array[Int], Array[Int]) = {

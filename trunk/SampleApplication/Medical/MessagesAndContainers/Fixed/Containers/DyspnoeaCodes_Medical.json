@@ -1,6 +1,6 @@
 {
    	"Container": { 
-   		"NameSpace":"System",
+   		"NameSpace":"com.ligadata.kamanja.samples.containers",
    		"Name":"DyspnoeaCodes",
    		"Version":"00.01.00",
    		"Description":"Container for Dyspnoea Codes",

@@ -1,6 +1,10 @@
 {
-    "HelloWorldModel":{
-        "Dependencies":["kamanjabase_2.10-1.0.jar"],
-        "MessageAndContainers":["system.msg1"]
+    "HelloWorldModel": {
+        "Dependencies": [
+            "kamanjabase_2.10-1.0.jar"
+        ],
+        "MessageAndContainers": [
+            "com.ligadata.kamanja.samples.messages.msg1"
+        ]
     }
 }

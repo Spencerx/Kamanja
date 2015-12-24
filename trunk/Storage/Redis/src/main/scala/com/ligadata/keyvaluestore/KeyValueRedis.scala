@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import com.redis.cluster._
 import com.redis._
 import collection.mutable.WrappedArray
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.Exceptions._
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -53,7 +53,7 @@ class KeyValueRedisTx(val parent: DataStore) extends Transaction {
 class KeyValueRedis(val kvManagerLoader: KamanjaLoaderInfo, val datastoreConfig: String, val tableName: String) extends DataStore {
   val adapterConfig = if (datastoreConfig != null) datastoreConfig.trim else ""
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   if (adapterConfig.size == 0) {
     throw new Exception("Not found valid Redis Configuration.")

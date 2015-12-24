@@ -27,7 +27,7 @@ import java.util._
 import java.lang.RuntimeException
 import java.util.NoSuchElementException
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import ObjTypeType._
 import ObjType._
@@ -53,12 +53,11 @@ import com.ligadata.Exceptions.StackTrace
  *
  */
 
-//BUGBUG:: ????????????????? Not yet allowing more than one version at this moment ????????????????? 
 class MdMgr {
 
   /** initialize a logger */
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   /** maps that hold caches of the metadata */
   /** making every thing is multi map, because we will have multiple versions for the same one */
@@ -69,6 +68,7 @@ class MdMgr {
   private var attrbDefs = new HashMap[String, Set[BaseAttributeDef]] with MultiMap[String, BaseAttributeDef]
   private var modelDefs = new HashMap[String, Set[ModelDef]] with MultiMap[String, ModelDef]
   private var outputMsgDefs = new HashMap[String, Set[OutputMsgDef]] with MultiMap[String, OutputMsgDef]
+  private var factoryOfMdlInstFactories = new HashMap[String, Set[FactoryOfModelInstanceFactoryDef]] with MultiMap[String, FactoryOfModelInstanceFactoryDef]
 
   // FunctionDefs keyed by function signature nmspc.name(argtyp1,argtyp2,...) map 
   private var compilerFuncDefs = scala.collection.mutable.Map[String, FunctionDef]()
@@ -83,10 +83,6 @@ class MdMgr {
   private var adapters = new HashMap[String, AdapterInfo]
   private var modelConfigs = new HashMap[String,scala.collection.immutable.Map[String,List[String]]]
   private var configurations = new HashMap[String,UserPropertiesInfo]
-
-  def SetLoggerLevel(level: Level) {
-    logger.setLevel(level);
-  }
 
   def truncate {
     typeDefs.clear
@@ -104,6 +100,7 @@ class MdMgr {
     adapters.clear
     outputMsgDefs.clear
     modelConfigs.clear
+    factoryOfMdlInstFactories.clear
   }
 
   def truncate(objectType: String) {
@@ -126,6 +123,9 @@ class MdMgr {
       }
       case "ModelDef" => {
         modelDefs.clear
+      }
+      case "FactoryOfMdlInstFactories" => {
+        factoryOfMdlInstFactories.clear
       }
       case "CompilerFuncDef" => {
         compilerFuncDefs.clear
@@ -173,6 +173,7 @@ class MdMgr {
     nodes.foreach(obj => { logger.debug("MacroSet Key = " + obj._1) })
     adapters.foreach(obj => { logger.debug("MacroSet Key = " + obj._1) })
     outputMsgDefs.foreach(obj => { logger.trace("outputMsgDef Key = " + obj._1) })
+    factoryOfMdlInstFactories.foreach(obj => { logger.trace("factoryOfMdlInstFactoryDef Key = " + obj._1) })
   }
 
   private def GetExactVersion[T <: BaseElemDef](elems: Option[scala.collection.immutable.Set[T]], ver: Long): Option[T] = {
@@ -711,6 +712,27 @@ class MdMgr {
     attr
   }
 
+  /** Get All Versions of FactoryOfModelInstanceFactoryDef */
+  def FactoryOfMdlInstFactories(onlyActive: Boolean, latestVersion: Boolean): Option[scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef]] = { GetImmutableSet(Some(factoryOfMdlInstFactories.flatMap(x => x._2)), onlyActive, latestVersion) }
+  
+  /** Answer ALL Active AND Current FactoryOfModelInstanceFactoryDef  */
+  def ActiveFactoryOfMdlInstFactories: scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef] = {
+    val optFactories: Option[scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef]] = FactoryOfMdlInstFactories(true, true)
+    val active : scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef] = optFactories match {
+      case Some(optFactories) => optFactories
+      case _ => null
+    }
+    active
+  }
+
+  /** Get All Versions of FactoryOfMdlInstFactories for Key */
+  def FactoryOfMdlInstFactories(key: String, onlyActive: Boolean, latestVersion: Boolean): Option[scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef]] = { GetImmutableSet(factoryOfMdlInstFactories.get(key.trim.toLowerCase), onlyActive, latestVersion) }
+  def FactoryOfMdlInstFactories(nameSpace: String, name: String, onlyActive: Boolean, latestVersion: Boolean): Option[scala.collection.immutable.Set[FactoryOfModelInstanceFactoryDef]] = FactoryOfMdlInstFactories(MdMgr.MkFullName(nameSpace, name), onlyActive, latestVersion)
+
+  /** Answer the FactoryOfModelInstanceFactoryDef with the supplied namespace and name  */
+  def FactoryOfMdlInstFactory(nameSpace: String, name: String, ver: Long, onlyActive: Boolean): Option[FactoryOfModelInstanceFactoryDef] = FactoryOfMdlInstFactory(MdMgr.MkFullName(nameSpace, name), ver, onlyActive)
+  def FactoryOfMdlInstFactory(key: String, ver: Long, onlyActive: Boolean): Option[FactoryOfModelInstanceFactoryDef] = GetReqValue(FactoryOfMdlInstFactories(key, onlyActive, false), ver)
+
   /** Get All Versions of Models */
   def Models(onlyActive: Boolean, latestVersion: Boolean): Option[scala.collection.immutable.Set[ModelDef]] = { GetImmutableSet(Some(modelDefs.flatMap(x => x._2)), onlyActive, latestVersion) }
   
@@ -723,7 +745,6 @@ class MdMgr {
     }
     activeModels
   }
-
 
   /** Get All Versions of Models for Key */
   def Models(key: String, onlyActive: Boolean, latestVersion: Boolean): Option[scala.collection.immutable.Set[ModelDef]] = { GetImmutableSet(modelDefs.get(key.trim.toLowerCase), onlyActive, latestVersion) }
@@ -1989,6 +2010,23 @@ class MdMgr {
 
   // Add Functions
   //
+  def MakeFactoryOfModelInstanceFactory(nameSpace: String, name: String, physicalName: String, ver: Long, jarNm: String, depJars: Array[String]): FactoryOfModelInstanceFactoryDef = {
+    val f = new FactoryOfModelInstanceFactoryDef
+    SetBaseElem(f, nameSpace, name, ver, jarNm, depJars)
+    f.PhysicalName(physicalName)
+    f
+  }
+
+  @throws(classOf[AlreadyExistsException])
+  def AddFactoryOfModelInstanceFactory(nameSpace: String, name: String, physicalName: String, ver: Long = 1, jarNm: String = null, depJars: Array[String] = null): Unit = {
+    AddFactoryOfModelInstanceFactory(MakeFactoryOfModelInstanceFactory(nameSpace, name, physicalName, ver, jarNm, depJars))
+  }
+
+  @throws(classOf[AlreadyExistsException])
+  def AddFactoryOfModelInstanceFactory(f: FactoryOfModelInstanceFactoryDef): Unit = {
+    factoryOfMdlInstFactories.addBinding(f.FullName, f)
+  }
+  
   /**
    *  MakeScalar catalogs any of the standard scalar types in the metadata manager's global typedefs map
    *
@@ -2915,8 +2953,8 @@ class MdMgr {
 
     @throws(classOf[AlreadyExistsException])
     @throws(classOf[NoSuchElementException])
-    def AddOutputMsg(nameSpace: String, name: String, ver: Long, queue: String, partionKeys: Array[(String, Array[(String, String)], String, String)], defaults: Map[String, String], dataDeclrtion: Map[String, String], fields: Map[(String, String), Set[(Array[(String, String)], String)]], outputFormat: String): Unit = {
-      AddOutputMsg(MakeOutputMsg(nameSpace, name, ver, queue, partionKeys, defaults, dataDeclrtion, fields, outputFormat))
+    def AddOutputMsg(nameSpace: String, name: String, ver: Long, queue: String, partionKeys: Array[(String, Array[(String, String, String, String)], String, String)], defaults: Map[String, String], dataDeclrtion: Map[String, String], fields: Map[(String, String), Set[(Array[(String, String, String, String)], String)]], outputFormat: String, formatSplittedArray: Array[(String, String)]): Unit = {
+      AddOutputMsg(MakeOutputMsg(nameSpace, name, ver, queue, partionKeys, defaults, dataDeclrtion, fields, outputFormat, formatSplittedArray))
     }
 
     /**
@@ -2934,7 +2972,7 @@ class MdMgr {
      *  @return OutputMsgDef
      */
 
-    def MakeOutputMsg(nameSpace: String, name: String, ver: Long, queue: String, partionKeys: Array[(String, Array[(String, String)], String, String)], defaults: Map[String, String], dataDeclrtion: Map[String, String], fields: Map[(String, String), Set[(Array[(String, String)], String)]], outputFormat: String): OutputMsgDef = {
+    def MakeOutputMsg(nameSpace: String, name: String, ver: Long, queue: String, partionKeys: Array[(String, Array[(String, String, String, String)], String, String)], defaults: Map[String, String], dataDeclrtion: Map[String, String], fields: Map[(String, String), Set[(Array[(String, String, String, String)], String)]], outputFormat: String, formatSplittedArray: Array[(String, String)]): OutputMsgDef = {
 
       val latestActiveMessage = OutputMessage(nameSpace, name, -1, false)
       if (latestActiveMessage != None) {
@@ -2955,6 +2993,7 @@ class MdMgr {
       od.DataDeclaration = dataDeclrtion
       od.Fields = fields
       od.OutputFormat = outputFormat
+      od.FormatSplittedArray = formatSplittedArray
       od.PhysicalName(physicalName)
       SetBaseElem(od, nameSpace, name, ver, null, null)
       od
@@ -3020,7 +3059,7 @@ object MdIdSeq {
 
 trait LogTrait {
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 }
 
 object MdMgr extends LogTrait {

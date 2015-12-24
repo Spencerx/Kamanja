@@ -27,7 +27,7 @@ import java.text.{SimpleDateFormat}
 import java.io._
 
 import sys.process._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import com.ligadata.keyvaluestore._
 import com.ligadata.KvBase._
@@ -38,6 +38,8 @@ import com.ligadata.Utils.{ KamanjaClassLoader, KamanjaLoaderInfo }
 import com.ligadata.StorageBase.StorageAdapterObj
 import com.ligadata.keyvaluestore.SqlServerAdapter
 
+import com.ligadata.Exceptions._
+
 case class Customer(name:String, address: String, homePhone: String)
 
 class SqlServerAdapterSpec extends FunSpec with BeforeAndAfter with BeforeAndAfterAll with GivenWhenThen {
@@ -47,28 +49,59 @@ class SqlServerAdapterSpec extends FunSpec with BeforeAndAfter with BeforeAndAft
   var serializer:Serializer = null
 
   private val loggerName = this.getClass.getName
-  private val logger = Logger.getLogger(loggerName)
-  logger.setLevel(Level.INFO)
+  private val logger = LogManager.getLogger(loggerName)
   val dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
   val dateFormat1 = new SimpleDateFormat("yyyy/MM/dd")
   // set the timezone to UTC for all time values
   TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
-
+  var containerName = ""
   private val kvManagerLoader = new KamanjaLoaderInfo
+  private val maxConnectionAttempts = 10
+
+  serializer = SerializerManager.GetSerializer("kryo")
+  logger.info("Initialize SqlServerAdapter")
+  val dataStoreInfo = """{"StoreType": "sqlserver","hostname": "192.168.56.1","instancename":"KAMANJA","portnumber":"1433","database": "bofa","user":"bofauser","SchemaName":"bofauser","password":"bofauser","jarpaths":"/media/home2/jdbc","jdbcJar":"sqljdbc4-2.0.jar","clusteredIndex":"YES"}"""
+  
+  private def ProcessException(e: Exception) = {
+      e match {
+	case e1: StorageDMLException => {
+	  logger.error("Inner Message:%s: Message:%s".format(e1.cause.getMessage,e1.getMessage))
+	}
+	case e2: StorageDDLException => {
+	  logger.error("Innser Message:%s: Message:%s".format(e2.cause.getMessage,e2.getMessage))
+	}
+	case e3: StorageConnectionException => {
+	  logger.error("Inner Message:%s: Message:%s".format(e3.cause.getMessage,e3.getMessage))
+	}
+	case _ => {
+	  logger.error("Message:%s".format(e.getMessage))
+	}
+      }
+      var stackTrace = StackTrace.ThrowableTraceString(e)
+      logger.info("StackTrace:"+stackTrace)
+  }	  
+
+  private def CreateAdapter: DataStore = {
+    var connectionAttempts = 0
+    while (connectionAttempts < maxConnectionAttempts) {
+      try {
+        adapter = SqlServerAdapter.CreateStorageAdapter(kvManagerLoader, dataStoreInfo)
+        return adapter
+      } catch {
+        case e: Exception => {
+	  ProcessException(e)
+          logger.error("will retry after one minute ...")
+          Thread.sleep(60 * 1000L)
+          connectionAttempts = connectionAttempts + 1
+        }
+      }
+    }
+    return null;
+  }
 
   override def beforeAll = {
-    try {
-      logger.info("starting...");
-
-      serializer = SerializerManager.GetSerializer("kryo")
-      logger.info("Initialize SqlServerAdapter")
-      val jarPaths = "/media/home2/installKamanja2/lib/system,/media/home2/installKamanja2/lib/application"
-      val dataStoreInfo = """{"StoreType": "sqlserver","hostname": "192.168.56.1","instancename":"KAMANJA","portnumber":"1433","database": "bofa1","user":"sa","password":"ligadata2014","jarpaths":"/media/home2/java_examples/sqljdbc_4.0/enu","jdbcJar":"sqljdbc4.jar"}"""
-      adapter = SqlServerAdapter.CreateStorageAdapter(kvManagerLoader, dataStoreInfo)
-   }
-    catch {
-      case e: Exception => throw new Exception("Failed to execute set up properly\n" + e)
-    }
+    logger.info("starting...");
+    CreateAdapter
   }
 
   private def RoundDateToSecs(d:Date): Date = {
@@ -102,25 +135,22 @@ class SqlServerAdapterSpec extends FunSpec with BeforeAndAfter with BeforeAndAft
     logger.info("----------------------------------------------------")
   }
 
-  @throws(classOf[FileNotFoundException])
-  def deleteFile(path:File):Boolean = {
-    if(!path.exists()){
-      throw new FileNotFoundException(path.getAbsolutePath)
-    }
-    var ret = true
-    if (path.isDirectory){
-      for(f <- path.listFiles) {
-        ret = ret && deleteFile(f)
+  def deleteFile(path:File):Unit = {
+    if(path.exists()){
+      if (path.isDirectory){
+	for(f <- path.listFiles) {
+          deleteFile(f)
+	}
       }
+      path.delete()
     }
-    return ret && path.delete()
   }
 
   describe("Unit Tests for all sqlserveradapter operations") {
 
     // validate property setup
     it ("Validate api operations") {
-      val containerName = "sys.customer1"
+      containerName = "sys.customer1"
 
       And("Test drop container")
       noException should be thrownBy {
@@ -133,14 +163,70 @@ class SqlServerAdapterSpec extends FunSpec with BeforeAndAfter with BeforeAndAft
       noException should be thrownBy {
 	var containers = new Array[String](0)
 	containers = containers :+ containerName
-	//adapter.CreateContainer(containers)
+	adapter.CreateContainer(containers)
       }
+
+      And("Test create container with invalid name")
+      containerName = "&&"
+      var ex = the [com.ligadata.Exceptions.StorageDDLException] thrownBy {
+	var containers = new Array[String](0)
+	containers = containers :+ containerName
+	adapter.CreateContainer(containers)
+      }
+      var stackTrace = StackTrace.ThrowableTraceString(ex)
+      logger.info("StackTrace:"+stackTrace)
+
+      And("Resume API Testing")
+      containerName = "sys.customer1"
+      
+      And("Test Put api throwing DML Exception")
+      var ex1 = the [com.ligadata.Exceptions.StorageDMLException] thrownBy {
+	var keys = new Array[Key](0) // to be used by a delete operation later on
+	var currentTime = new Date()
+	var keyArray = new Array[String](0)
+	// pick a bucketKey values longer than 1024 characters
+	var custName = "customerxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	keyArray = keyArray :+ custName
+	var key = new Key(currentTime.getTime(),keyArray,1,1)
+	var custAddress = "1000"  + ",Main St, Redmond WA 98052"
+	var custNumber = "4256667777"
+	var obj = new Customer(custName,custAddress,custNumber)
+	var v = serializer.SerializeObjectToByteArray(obj)
+	var value = new Value("kryo",v)
+	adapter.put(containerName,key,value)
+      }
+      stackTrace = StackTrace.ThrowableTraceString(ex1)
+      logger.info("StackTrace:"+stackTrace)
+
+      val sqlServerAdapter = adapter.asInstanceOf[SqlServerAdapter]
+
+      And("Make sure rollback happened by doing a row count")
+      var cnt = sqlServerAdapter.getRowCount(containerName,null)
+      assert(cnt == 0)
+
+      And("Test Put api throwing DDL Exception - use invalid container name")
+      var ex2 = the [com.ligadata.Exceptions.StorageDMLException] thrownBy {
+	var keys = new Array[Key](0) // to be used by a delete operation later on
+	var currentTime = new Date()
+	var keyArray = new Array[String](0)
+	// pick a bucketKey values longer than 1024 characters
+	var custName = "customer1"
+	keyArray = keyArray :+ custName
+	var key = new Key(currentTime.getTime(),keyArray,1,1)
+	var custAddress = "1000"  + ",Main St, Redmond WA 98052"
+	var custNumber = "4256667777"
+	var obj = new Customer(custName,custAddress,custNumber)
+	var v = serializer.SerializeObjectToByteArray(obj)
+	var value = new Value("kryo",v)
+	adapter.put("&&",key,value)
+      }
+      stackTrace = StackTrace.ThrowableTraceString(ex2.cause)
+      logger.info("StackTrace:"+stackTrace)
 
       And("Test Put api")
       var keys = new Array[Key](0) // to be used by a delete operation later on
       for( i <- 1 to 10 ){
 	var currentTime = new Date()
-	//var currentTime = null
 	var keyArray = new Array[String](0)
 	var custName = "customer-" + i
 	keyArray = keyArray :+ custName
@@ -161,10 +247,9 @@ class SqlServerAdapterSpec extends FunSpec with BeforeAndAfter with BeforeAndAft
 	adapter.get(containerName,readCallBack _)
       }
 
-      val sqlServerAdapter = adapter.asInstanceOf[SqlServerAdapter]
 
       And("Check the row count after adding a bunch")
-      var cnt = sqlServerAdapter.getRowCount(containerName,null)
+      cnt = sqlServerAdapter.getRowCount(containerName,null)
       assert(cnt == 10)
 
       And("Get all the keys for the rows that were just added")

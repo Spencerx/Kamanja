@@ -17,14 +17,13 @@
 package com.ligadata.samples.models;
 
 import com.ligadata.KamanjaBase.*;
+import com.ligadata.kamanja.metadata.ModelDef;
 import com.ligadata.samples.messages.*;
 import com.google.common.base.Optional;
+import com.ligadata.kamanja.metadata.ModelDef;
 
-public class JavaTestMdl extends ModelBase {
-
-	static JavaTestMdlObj objSignleton = new JavaTestMdlObj();
-
-	public ModelResultBase execute(boolean emitAllResults) {
+public class JavaTestMdl extends ModelInstance {
+	public ModelResultBase execute(TransactionContext txnCtxt, boolean outputDefault) {
 		// Directly calling methods from Scala Singleton object. Not preferable
 		// to use direct scala.
 		CustAlertHistory custAlertHistory = CustAlertHistoryFactory.rddObject.getRecentOrNew();
@@ -42,28 +41,32 @@ public class JavaTestMdl extends ModelBase {
 		return null;
 	}
 
-	public JavaTestMdl(ModelContext mdlContext) {
-		super(mdlContext, objSignleton);
+	public JavaTestMdl(ModelInstanceFactory factory) {
+		super(factory);
 	}
 
-	public static class JavaTestMdlObj implements ModelBaseObj {
-		public boolean IsValidMessage(MessageContainerBase msg) {
+	public static class JavaTestMdlFactory extends ModelInstanceFactory {
+		public JavaTestMdlFactory(ModelDef mdlDef, NodeContext nodeContext) {
+			super(mdlDef, nodeContext);
+		}
+
+		public boolean isValidMessage(MessageContainerBase msg) {
 			return (msg instanceof CustAlertHistory);
 		}
 
-		public ModelBase CreateNewModel(ModelContext mdlContext) {
-			return new JavaTestMdl(mdlContext);
+		public ModelInstance createModelInstance() {
+			return new JavaTestMdl(this);
 		}
 
-		public String ModelName() {
+		public String getModelName() {
 			return "JavaTestMdl";
 		}
 
-		public String Version() {
+		public String getVersion() {
 			return "0.0.1";
 		}
 
-		public ModelResultBase CreateResultObject() {
+		public ModelResultBase createResultObject() {
 			return new MappedModelResults();
 		}
 	}

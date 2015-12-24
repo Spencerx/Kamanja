@@ -24,12 +24,12 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import scala.xml.XML
 import scala.xml.Elem
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 // To filter data coming from Input (Queue/file). This takes N input fields and M output fields. Output fields are subset of Input fields.
 // We also have KEY. So that we can start sending the user into separate threads from here.
 class TransformMessageData {
-  private val LOG = Logger.getLogger(getClass);
+  private val LOG = LogManager.getLogger(getClass);
 
   private def parseCsvInputData(inputData: String, associatedMsg: String, delimiters: DataDelimiters): (String, MsgContainerObjAndTransformInfo, InputData) = {
     if (delimiters.IsFieldDelimiterEmpty) delimiters.fieldDelimiter = ","

@@ -23,13 +23,13 @@ import javax.security.auth.Subject;
 import java.security._
 import javax.security.auth.callback._
 import javax.security.auth.kerberos._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.Exceptions.StackTrace
 
 class SampleKerberosActions(inPriv: String) extends java.security.PrivilegedAction[String] {
   private def priv = inPriv
   val loggerName = this.getClass.getName
-  val log = Logger.getLogger(loggerName)
+  val log = LogManager.getLogger(loggerName)
   
   def run: String = {
     // if write is requested, see if we are allowed to access KAMANJA_OBJECT_WRITE System property
@@ -58,7 +58,7 @@ class SimpleKerberosAdapter extends SecurityAdapter {
   override def performAuth(secParams: java.util.Properties): Boolean = {
     
     val loggerName = this.getClass.getName
-    val log = Logger.getLogger(loggerName)  
+    val log = LogManager.getLogger(loggerName)  
     var mysubject: Subject = new Subject
     var lc: LoginContext = null
     

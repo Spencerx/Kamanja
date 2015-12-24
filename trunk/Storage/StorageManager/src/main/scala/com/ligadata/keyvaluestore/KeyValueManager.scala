@@ -21,7 +21,7 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import com.ligadata.StorageBase.{ DataStore }
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.keyvaluestore._
 import com.ligadata.Utils.Utils._
 import com.ligadata.Utils.{ KamanjaClassLoader, KamanjaLoaderInfo }
@@ -29,7 +29,7 @@ import com.ligadata.StorageBase.StorageAdapterObj
 
 object KeyValueManager {
   private val loggerName = this.getClass.getName
-  private val logger = Logger.getLogger(loggerName)
+  private val logger = LogManager.getLogger(loggerName)
   private val kvManagerLoader = new KamanjaLoaderInfo
   // We will add more implementations here 
   // so we can test  the system characteristics
@@ -60,21 +60,22 @@ object KeyValueManager {
     val storeType = parsed_json.getOrElse("StoreType", "").toString.trim.toLowerCase
 
     storeType match {
+
+      // Other KV stores
+      case "cassandra" => return CassandraAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
+      case "hbase" => return HBaseAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
       /*
-      // Other KV stored
-      case "cassandra" => return KeyValueCassandra.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
-      case "hbase" => return KeyValueHBase.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
       // Simple file base implementations
-      case "treemap" => return KeyValueTreeMap.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
-      case "hashmap" => return KeyValueHashMap.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
       case "redis" => return KeyValueRedis.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
-*/
+      */
+      case "hashmap" => return HashMapAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
+      case "treemap" => return TreeMapAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
       // Other relational stores such as sqlserver, mysql
       case "sqlserver" => return SqlServerAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
+      // case "mysql" => return MySqlAdapter.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
 
       // Default, Load it from Class
       case _ => {
-        /*
         val (className, jarName, dependencyJars) = getClassNameJarNameDepJarsFromJson(parsed_json)
         logger.debug("className:%s, jarName:%s, dependencyJars:%s".format(className, jarName, dependencyJars))
         if (className != null && className.size > 0 && jarName != null && jarName.size > 0) {
@@ -133,7 +134,7 @@ object KeyValueManager {
               val objinst = obj.instance
               if (objinst.isInstanceOf[StorageAdapterObj]) {
                 val storageAdapterObj = objinst.asInstanceOf[StorageAdapterObj]
-                return storageAdapterObj.CreateStorageAdapter(kvManagerLoader, datastoreConfig, tableName)
+                return storageAdapterObj.CreateStorageAdapter(kvManagerLoader, datastoreConfig)
               } else {
                 logger.error("Failed to instantiate Storage Adapter with configuration:" + adapterConfig)
                 return null
@@ -150,10 +151,6 @@ object KeyValueManager {
             return null
           }
         }
-*/
-        val errMsg = "Failed to instantiate Storage Adapter with configuration:" + adapterConfig
-        logger.error(errMsg)
-        throw new Exception(errMsg)
       }
     }
     val errMsg = "Failed to instantiate Storage Adapter with configuration:" + adapterConfig

@@ -28,7 +28,7 @@ import header.Headers
 import header.HeaderName._
 
 import java.net.URL
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -44,7 +44,7 @@ case class ApiResultJsonProxy(ApiResults: ApiResultInfo)
 
 object TestApiService {
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   lazy val metadataAPIConfig = new Properties()
   var host_url: String = ""
@@ -1438,7 +1438,6 @@ object TestApiService {
           }
 
           val outputmsgDefFile = outputmsgFiles(choice - 1).toString
-          logger.setLevel(Level.TRACE);
           val outputmsgStr = Source.fromFile(outputmsgDefFile).mkString
           val res: String = MakeHttpRequest("post", host_url, "OutputMsg", "JSON", outputmsgStr)
           results += Tuple3(choice.toString, outputmsgDefFile, res)

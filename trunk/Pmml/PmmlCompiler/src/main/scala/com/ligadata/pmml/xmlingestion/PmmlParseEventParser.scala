@@ -21,7 +21,7 @@ import org.xml.sax.helpers.DefaultHandler
 import org.xml.sax.Locator
 import scala.collection._
 import scala.collection.mutable.Stack
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.pmml.compiler._
 import com.ligadata.pmml.support._
 import com.ligadata.pmml.traits._

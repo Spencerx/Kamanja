@@ -27,7 +27,7 @@ import com.ligadata.MetadataAPI._
 import com.ligadata.Serialize._
 
 import scala.util.control._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -47,7 +47,7 @@ class GetAuditLogService(requestContext: RequestContext, userid:Option[String], 
   val log = Logging(system, getClass)
   
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 //  logger.setLevel(Level.TRACE);
 
   val APIName = "GetAuditLog"

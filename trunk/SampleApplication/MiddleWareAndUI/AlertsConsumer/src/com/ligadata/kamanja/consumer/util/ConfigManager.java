@@ -18,11 +18,11 @@ package com.ligadata.kamanja.consumer.util;
 
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.XMLConfiguration;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.{ Logger, LogManager };
 
 public class ConfigManager {
 
-	private static Logger logger = Logger.getLogger(ConfigManager.class);
+	private static Logger logger = LogManager.getLogger(ConfigManager.class);
 
 	public static XMLConfiguration getConfig(String configFile) {
 

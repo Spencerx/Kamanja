@@ -18,11 +18,11 @@ package com.ligadata.Serialize
 
 import com.ligadata.Exceptions._
 import com.ligadata.Exceptions.StackTrace
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 object SerializerManager {
    val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
   def GetSerializer(serializerType: String): Serializer = {
     try {
       serializerType.toLowerCase match {

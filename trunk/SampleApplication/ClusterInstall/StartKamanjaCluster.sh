@@ -104,10 +104,10 @@ while read LINE; do
 		cd $targetPath
 		echo "nodeCfg=$nodeCfg"
         if [ "$processingengine_cnt" -gt 0 ]; then
-		java -Xmx50g -Xms50g -Dlog4j.configuration=file:$targetPath/engine_log4j.properties -Djavax.net.ssl.trustStore=/apps/projects/fusioncell2/ssl/keystoreFC16_RBB_Fusion_Cell.jks -Djavax.net.ssl.keyStore=/apps/projects/fusioncell2/ssl/keystoreFC16_RBB_Fusion_Cell.jks -Djavax.net.ssl.keyStorePassword=fc2appKey16app -Djavax.net.ssl.trustStorePassword=fc2appKey16app -jar "$installDir/bin/KamanjaManager-1.0" --config "$targetPath/$nodeCfg" < /dev/null > /dev/null 2>&1 & 
+		java -Xmx50g -Xms50g -Dlog4j.configurationFile=file:$targetPath/engine_log4j2.xml -Djavax.net.ssl.trustStore=/apps/projects/fusioncell2/ssl/keystoreFC16_RBB_Fusion_Cell.jks -Djavax.net.ssl.keyStore=/apps/projects/fusioncell2/ssl/keystoreFC16_RBB_Fusion_Cell.jks -Djavax.net.ssl.keyStorePassword=fc2appKey16app -Djavax.net.ssl.trustStorePassword=fc2appKey16app -jar "$installDir/bin/KamanjaManager-1.0" --config "$targetPath/$nodeCfg" < /dev/null > /dev/null 2>&1 & 
         fi
         if [ "$restapi_cnt" -gt 0 ]; then
-		java -Dlog4j.configuration=file:$targetPath/restapi_log4j.properties  -jar "$installDir/bin/MetadataAPIService-1.0" --config "$targetPath/MetadataAPIConfig_${id}.properties" < /dev/null > /dev/null 2>&1 & 
+		java -Dlog4j.configurationFile=file:$targetPath/restapi_log4j2.xml -jar "$installDir/bin/MetadataAPIService-1.0" --config "$targetPath/MetadataAPIConfig_${id}.properties" < /dev/null > /dev/null 2>&1 & 
         fi
 		if [ ! -d "$installDir/run" ]; then
 			mkdir "$installDir/run"

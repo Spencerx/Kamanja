@@ -37,7 +37,7 @@ object EmbeddedZookeeper {
 
 
   protected class EmbeddedZookeeper(private var port: Int, private var tickTime: Int) {
-    private val logger = org.apache.log4j.Logger.getLogger(this.getClass)
+    private val logger = org.apache.logging.log4j.LogManager.getLogger(this.getClass)
     private var factory: ServerCnxnFactory = _
     private var snapshotDir: File = _
     private var logDir: File = _

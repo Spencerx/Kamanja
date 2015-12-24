@@ -49,7 +49,7 @@ import org.joda.time.format.DateTimeFormatterBuilder
 import org.joda.time.format.DateTimeParser
 import org.joda.time.chrono.JulianChronology
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 
 import com.ligadata.pmml.runtime._
 import com.ligadata.Exceptions.StackTrace

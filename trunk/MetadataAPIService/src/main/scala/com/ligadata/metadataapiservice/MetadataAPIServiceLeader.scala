@@ -23,7 +23,7 @@ import com.ligadata.MetadataAPI._
 import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadata.MdMgr._
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.Serialize._
 import com.ligadata.ZooKeeper._
 import org.apache.curator.framework._
@@ -31,13 +31,13 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.Exceptions.StackTrace
 
 
 
 object MetadataAPIServiceLeader {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
   private[this] val lock = new Object()
   private[this] var clusterStatus = ClusterStatus("", false, "", null)
   private[this] var zkLeaderLatch: ZkLeaderLatch = _

@@ -37,6 +37,10 @@ mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
   case x if x contains "org/objectweb/asm/" => MergeStrategy.last
   case x if x contains "org/apache/commons/collections" =>  MergeStrategy.last
   case x if x contains "org\\apache\\commons\\collections" =>  MergeStrategy.last
+    case x if x contains "com.fasterxml.jackson.core" => MergeStrategy.first
+    case x if x contains "com/fasterxml/jackson/core" => MergeStrategy.first
+    case x if x contains "com\\fasterxml\\jackson\\core" => MergeStrategy.first
+    case x if x contains "commons-logging" => MergeStrategy.first
   case "log4j.properties" => MergeStrategy.first
   case "unwanted.txt"     => MergeStrategy.discard
   case x => old(x)
@@ -63,7 +67,11 @@ libraryDependencies ++= {
    // "io.spray" % "spray-testkit" % sprayVersion,
    // "io.spray" % "spray-client" % sprayVersion,
    // "io.spray" %%  "spray-json" % "1.2.5",
-    "org.apache.kafka" % "kafka_2.10" % "0.8.1.1",
+    "org.apache.kafka" % "kafka_2.10" % "0.8.1.1"
+      exclude("javax.jms", "jms")
+      exclude("com.sun.jdmk", "jmxtools")
+      exclude("com.sun.jmx", "jmxri"),
+   // "org.apache.kafka" % "kafka_2.10" % "0.8.2.0",
   //  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
   //  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
    // "ch.qos.logback" % "logback-classic" % "1.0.12",

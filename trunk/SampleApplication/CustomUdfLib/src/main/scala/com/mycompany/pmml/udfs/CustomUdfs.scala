@@ -20,7 +20,7 @@ import java.util.UUID
 import org.joda.time.{LocalDate, DateTime, Duration, LocalTime, LocalDateTime, Months, Years}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.format.DateTimeFormatter
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.pmml.udfs._
 import com.ligadata.pmml.udfs.Udfs._
 
@@ -88,7 +88,7 @@ import com.ligadata.pmml.udfs.Udfs._
 
 trait LogTrait {
     val loggerName = this.getClass.getName()
-    val logger = Logger.getLogger(loggerName)
+    val logger = LogManager.getLogger(loggerName)
 }
 
 object CustomUdfs extends LogTrait {

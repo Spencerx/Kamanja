@@ -39,6 +39,10 @@ mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
     case x if x endsWith "StaticLoggerBinder.class" =>  MergeStrategy.first
     case x if x endsWith "StaticMDCBinder.class" =>  MergeStrategy.first
     case x if x endsWith "StaticMarkerBinder.class" =>  MergeStrategy.first
+    case x if x contains "com.fasterxml.jackson.core" => MergeStrategy.first
+    case x if x contains "com/fasterxml/jackson/core" => MergeStrategy.first
+    case x if x contains "com\\fasterxml\\jackson\\core" => MergeStrategy.first
+    case x if x contains "commons-logging" => MergeStrategy.first
     case "log4j.properties" => MergeStrategy.first
     case "unwanted.txt"     => MergeStrategy.discard
     case x => old(x)
@@ -72,7 +76,7 @@ libraryDependencies ++= {
   "io.spray" % "spray-client" % sprayVersion,
   "io.spray" %%  "spray-json" % "1.2.5",
   "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+//  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "ch.qos.logback" % "logback-classic" % "1.0.12",
   "org.apache.camel" % "camel-core" % "2.9.2"
   )

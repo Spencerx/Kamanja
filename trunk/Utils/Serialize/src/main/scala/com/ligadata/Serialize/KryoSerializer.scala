@@ -20,7 +20,7 @@ import java.util.Properties
 import java.io._
 import scala.Enumeration
 import scala.io.Source._
-import org.apache.log4j._
+import org.apache.logging.log4j._
 
 import com.ligadata.kamanja.metadata._
 
@@ -35,11 +35,7 @@ class KryoSerializer extends Serializer{
   private[this] var classLoader: java.lang.ClassLoader = null
 
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
-
-  def SetLoggerLevel(level: Level){
-    logger.setLevel(level);
-  }
+  lazy val logger = LogManager.getLogger(loggerName)
 
   override def SetClassLoader(cl : java.lang.ClassLoader): Unit = {
     classLoader = cl

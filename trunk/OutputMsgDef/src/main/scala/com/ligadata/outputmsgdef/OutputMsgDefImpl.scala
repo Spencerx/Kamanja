@@ -24,7 +24,7 @@ import com.ligadata.kamanja.metadata.ObjType._
 import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadata.MdMgr._
 import com.ligadata.Exceptions._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import scala.collection.mutable.ListBuffer
 import com.ligadata.Exceptions.StackTrace
 
@@ -36,7 +36,7 @@ class OutputMessage(var NameSpace: String, var Name: String, var Version: String
 object OutputMsgDefImpl {
 
   val logger = this.getClass.getName
-  lazy val log = Logger.getLogger(logger)
+  lazy val log = LogManager.getLogger(logger)
 
   /**
    * ${System.PatientDetails.Name.FirstName}
@@ -102,28 +102,28 @@ object OutputMsgDefImpl {
       })
       var i: Int = 1
       //var Fields : Map[(String, String), Set[(Array[(String, String)], String)]] = _  // Fields from Message/Model. Map Key is Message/Model Full Qualified Name as first value in key tuple and "Mdl" Or "Msg" String as the second value in key tuple. Value is Set of fields(Array[(String, String)](("inpatient_claims", "System.arrayOfInpatientClaims"), ("claim_id", "System.Long"))) & corresponding Default Value (if not present NULL)
-      var Fields: scala.collection.mutable.Map[(String, String), scala.collection.mutable.Set[(Array[(String, String)], String)]] = scala.collection.mutable.Map()
+      var Fields: scala.collection.mutable.Map[(String, String), scala.collection.mutable.Set[(Array[(String, String, String, String)], String)]] = scala.collection.mutable.Map()
       var fieldscheck: Set[(String, String)] = Set[(String, String)]()
-      var partionFieldKeys = Array[(String, Array[(String, String)], String, String)]()
+      var partionFieldKeys = Array[(String, Array[(String, String, String, String)], String, String)]()
 
       if (paritionKeys != null && paritionKeys.size > 0) {
         paritionKeys.foreach(partionkey => {
-          val (fullname, fieldsInfo, typeOf, fullpartionkey) = getFieldsInfo(partionkey)
+          val tmpPartKey1 = partionkey.trim
+          val tmpPartKey2 = tmpPartKey1.substring(2, tmpPartKey1.length() - 1) // Just full qualified name of the model/message/container
+          val (fullname, fieldsInfo, typeOf, fullpartionkey) = getFieldsInfo(tmpPartKey2)
           log.debug("fullname:%s, fieldsInfo:%s, typeOf:%s, fullpartionkey:%s".format(fullname, fieldsInfo.mkString("~~"), typeOf, fullpartionkey))
           partionFieldKeys = partionFieldKeys :+ (fullname, fieldsInfo.toArray, typeOf, fullpartionkey)
           var defaultValue: String = null
           if (dfaults.contains(partionkey)) {
             defaultValue = dfaults(partionkey)
           }
-          var fldInfo: Array[(String, String)] = fieldsInfo.asInstanceOf[Array[(String, String)]]
-          var value: Array[(String, String)] = Array[(String, String)]()
-          value = fldInfo
+          
           if (Fields.contains((fullname, typeOf))) {
             log.debug("1-fullname:%s, typeOf:%s".format(fullname, typeOf))
-            Fields((fullname, typeOf)) += ((value, defaultValue))
+            Fields((fullname, typeOf)) += ((fieldsInfo, defaultValue))
           } else {
-            var valueVal: scala.collection.mutable.Set[(Array[(String, String)], String)] = scala.collection.mutable.Set[(Array[(String, String)], String)]()
-            valueVal += ((fldInfo, defaultValue))
+            var valueVal: scala.collection.mutable.Set[(Array[(String, String, String, String)], String)] = scala.collection.mutable.Set[(Array[(String, String, String, String)], String)]()
+            valueVal += ((fieldsInfo, defaultValue))
             log.debug("2-fullname:%s, typeOf:%s".format(fullname, typeOf))
             Fields((fullname, typeOf)) = (valueVal)
           }
@@ -136,35 +136,45 @@ object OutputMsgDefImpl {
         dataDeclaration.foreach(dd => { dd.foreach(d => { dataDeclrtion(d._1.toLowerCase()) = d._2 }) })
       }
 
-      val allOutputFormatFlds = extractOutputFormat(outputFormat)
-      // var outputFormatFields = Map[(String, Array[(String, String)], String, String)]()
+      val allOutputFormatFieldsAndStartEndOffsets = extractStringStartEndOffsetsFromOutputFormat(outputFormat)
 
-      if (allOutputFormatFlds != null && allOutputFormatFlds.size > 0) {
-        allOutputFormatFlds.foreach(outputFormatFld => {
-          val outputFmtFld = outputFormatFld.substring(2, outputFormatFld.length() - 1).toLowerCase()
+      if (allOutputFormatFieldsAndStartEndOffsets != null && allOutputFormatFieldsAndStartEndOffsets.size > 0) {
+        allOutputFormatFieldsAndStartEndOffsets.foreach(outputFormatFldStartEndOffset => {
+          val outputFmtFld = outputFormatFldStartEndOffset._1
           var defaultValue: String = null
           if (dfaults.contains(outputFmtFld)) {
             defaultValue = dfaults(outputFmtFld)
           }
-          val (fullname, fieldsInfo, typeOf, fullFieldkey) = getFieldsInfo(outputFormatFld)
 
-          var fldInfo: Array[(String, String)] = fieldsInfo.asInstanceOf[Array[(String, String)]]
-          var value: Array[(String, String)] = Array[(String, String)]()
-          value = fldInfo
+          val (fullname, fieldsInfo, typeOf, fullFieldkey) = getFieldsInfo(outputFmtFld) // Just take full qualified name of the model/message/container
+
           if (Fields.contains((fullname, typeOf))) {
             log.debug("3-fullname:%s, typeOf:%s".format(fullname, typeOf))
-            Fields((fullname, typeOf)) += ((value, defaultValue))
+            Fields((fullname, typeOf)) += ((fieldsInfo, defaultValue))
           } else {
-            var valueVal: scala.collection.mutable.Set[(Array[(String, String)], String)] = scala.collection.mutable.Set[(Array[(String, String)], String)]()
-            valueVal += ((fldInfo, defaultValue))
+            var valueVal: scala.collection.mutable.Set[(Array[(String, String, String, String)], String)] = scala.collection.mutable.Set[(Array[(String, String, String, String)], String)]()
+            valueVal += ((fieldsInfo, defaultValue))
             log.debug("4-fullname:%s, typeOf:%s".format(fullname, typeOf))
             Fields((fullname, typeOf)) = (valueVal)
           }
         })
       }
 
-      outputMsgDef = MdMgr.GetMdMgr.MakeOutputMsg(nameSpace.toLowerCase(), name.toLowerCase(), version, outputQ, partionFieldKeys, dfaults, dataDeclrtion, Fields, outputFormat)
-
+      // Creating the list of Constant String & matched pattern tuples
+      var formatSplittedArray = ArrayBuffer[(String, String)]()
+      var nextStrStartIdx = 0
+      if (allOutputFormatFieldsAndStartEndOffsets != null && allOutputFormatFieldsAndStartEndOffsets.size > 0) {
+        allOutputFormatFieldsAndStartEndOffsets.foreach(outputFormatFldStartEndOffset => {
+          val constStr = outputFormat.substring(nextStrStartIdx, outputFormatFldStartEndOffset._2)
+          val matchedPattern = outputFormatFldStartEndOffset._1
+          nextStrStartIdx = outputFormatFldStartEndOffset._3
+          formatSplittedArray += ((constStr, matchedPattern))
+        })
+      }
+      // Last constant string, if we still have any 
+      if (nextStrStartIdx < outputFormat.size)
+        formatSplittedArray += ((outputFormat.substring(nextStrStartIdx), ""))
+      outputMsgDef = MdMgr.GetMdMgr.MakeOutputMsg(nameSpace.toLowerCase(), name.toLowerCase(), version, outputQ, partionFieldKeys, dfaults, dataDeclrtion, Fields, outputFormat, formatSplittedArray.toArray)
     } catch {
       case e: ObjectNolongerExistsException => {
         log.error(s"Either Model or Message or Container do not exists in Metadata. Error: " + e.getMessage)
@@ -179,24 +189,20 @@ object OutputMsgDefImpl {
     outputMsgDef
   }
 
-  private def extractOutputFormat(outputformat: String): Array[String] = {
+  private def extractStringStartEndOffsetsFromOutputFormat(outputformat: String): Array[(String, Int, Int)] = {
     val extractor = """\$\{([^}]+)\}""".r
-    val finds = extractor.findAllIn(outputformat)
-    val allOutputFnds = finds.map(fld => fld.toLowerCase()).toArray
-    allOutputFnds
+    val finds = extractor.findAllIn(outputformat).matchData
+    finds.map(m => (m.group(1).toLowerCase.trim, m.start, m.end)).toArray // Making sure we take only the model/messag/container full qualified name withoyut ${ and }. And for start & end offsets we take full matched string with ${ and } 
   }
 
-  private def getFieldsInfo(Fieldkey: String): (String, Array[(String, String)], String, String) = {
-    var fieldsInfo: ArrayBuffer[(String, String)] = new ArrayBuffer[(String, String)]()
-    var partitionKeys = Array[(String, Array[(String, String)], String, String)]()
+  private def getFieldsInfo(fullpartionkey: String): (String, Array[(String, String, String, String)], String, String) = {
+    var fieldsInfo: ArrayBuffer[(String, String, String, String)] = new ArrayBuffer[(String, String, String, String)]()
+    var partitionKeys = Array[(String, Array[(String, String, String, String)], String, String)]()
     var fullname: String = ""
-    var fullpartionkey: String = ""
     var typeof: String = ""
     try {
-      if (Fieldkey == null || Fieldkey.trim() == "")
+      if (fullpartionkey == null || fullpartionkey.trim() == "")
         throw new Exception("Field do not exists")
-
-      fullpartionkey = Fieldkey.substring(2, Fieldkey.length() - 1)
 
       val partionKeyParts = fullpartionkey.split("\\.")
       if (partionKeyParts.size < 3)
@@ -231,14 +237,19 @@ object OutputMsgDefImpl {
       val name = partionKeyParts(namespaceWords)
 
       val (childs, typeOf) = getModelMsgContainerChilds(containerDef, messageDef, modelDef)
-      typeof = typeOf
+      typeof = typeOf.toLowerCase()
       log.debug("namespace:%s, name:%s, typeof:%s, namespaceWords:%d".format(namespace, name, typeof, namespaceWords))
 
       for (i <- (namespaceWords + 1) until partionKeyParts.size) {
         if (i == (namespaceWords + 1)) {
           val fld = partionKeyParts(i).toString().toLowerCase()
           val fldType = getFieldTypeFromMsgCtr(childs, fld)
-          fieldsInfo += ((fld, fldType))
+
+          val typ = MdMgr.GetMdMgr.Type(fldType, -1, true)
+          val tType = if (typ == None) "" else typ.get.tType.toString().toLowerCase()
+          val tTypeType = if (typ == None) "" else typ.get.tTypeType.toString().toLowerCase()
+
+          fieldsInfo += ((fld, fldType, tType, tTypeType))
 
         } else if (i > (namespaceWords + 1)) {
           fieldsInfo.foreach(f => log.info("====fieldInfos========" + f._1 + "======" + f._2))
@@ -246,10 +257,15 @@ object OutputMsgDefImpl {
           val parentType = parent._2.toLowerCase()
           val fieldName = partionKeyParts(i).toString().toLowerCase()
           val fieldType = getFieldType(fieldName, parentType)
-          fieldsInfo += ((fieldName, fieldType))
+
+          val typ = MdMgr.GetMdMgr.Type(fieldType, -1, true)
+          val tType = if (typ == None) "" else typ.get.tType.toString().toLowerCase()
+          val tTypeType = if (typ == None) "" else typ.get.tTypeType.toString().toLowerCase()
+
+          fieldsInfo += ((fieldName, fieldType, tType, tTypeType))
         }
       }
-      fullname = namespace + "." + name
+      fullname = (namespace + "." + name).toLowerCase()
       log.debug("fullname:%s".format(fullname))
 
     } catch {

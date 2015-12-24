@@ -15,6 +15,10 @@ libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value
 
 resolvers += Resolver.file("Local repo", file(System.getProperty("user.home") + "/.ivy2/local"))(Resolver.ivyStylePatterns)
 
+resolvers += Resolver.typesafeRepo("releases")
+
+resolvers += Resolver.sonatypeRepo("releases")
+
 val Organization = "com.ligadata"
 
 lazy val BaseTypes = project.in(file("BaseTypes")) dependsOn(Metadata, Exceptions)
@@ -40,6 +44,8 @@ lazy val InputOutputAdapterBase = project.in(file("InputOutputAdapters/InputOutp
 lazy val IbmMqSimpleInputOutputAdapters = project.in(file("InputOutputAdapters/IbmMqSimpleInputOutputAdapters")) dependsOn(InputOutputAdapterBase, Exceptions, DataDelimiters)
 
 lazy val KafkaSimpleInputOutputAdapters = project.in(file("InputOutputAdapters/KafkaSimpleInputOutputAdapters")) dependsOn(InputOutputAdapterBase, Exceptions, DataDelimiters)
+
+lazy val FileSimpleInputOutputAdapters = project.in(file("InputOutputAdapters/FileSimpleInputOutputAdapters")) dependsOn(InputOutputAdapterBase, Exceptions, DataDelimiters)
 
 lazy val SimpleEnvContextImpl = project.in(file("EnvContexts/SimpleEnvContextImpl")) dependsOn(KamanjaBase, StorageManager, Serialize, Exceptions)
 
@@ -67,7 +73,7 @@ lazy val PmmlUdfs = project.in(file("Pmml/PmmlUdfs")) dependsOn(Metadata, PmmlRu
 
 lazy val MethodExtractor = project.in(file("Pmml/MethodExtractor")) dependsOn(PmmlUdfs, Metadata, KamanjaBase, Serialize, Exceptions)
 
-lazy val MetadataAPI = project.in(file("MetadataAPI")) dependsOn(StorageManager,Metadata,MessageDef,PmmlCompiler,Serialize,ZooKeeperClient,ZooKeeperListener,OutputMsgDef,Exceptions, SecurityAdapterBase, KamanjaUtils, HeartBeat)
+lazy val MetadataAPI = project.in(file("MetadataAPI")) dependsOn(StorageManager,Metadata,MessageDef,PmmlCompiler,Serialize,ZooKeeperClient,ZooKeeperListener,OutputMsgDef,Exceptions, SecurityAdapterBase, KamanjaUtils, HeartBeat, KamanjaBase)
 
 lazy val MetadataBootstrap = project.in(file("MetadataBootstrap/Bootstrap")) dependsOn(Metadata, KamanjaBase, BaseTypes, Exceptions)
 
@@ -99,21 +105,23 @@ lazy val ExtractData = project.in(file("Utils/ExtractData")) dependsOn(Metadata,
 
 lazy val InterfacesSamples = project.in(file("SampleApplication/InterfacesSamples")) dependsOn(Metadata, KamanjaBase, MetadataBootstrap, MetadataAPI, StorageBase, Exceptions)
 
-// lazy val StorageCassandra = project.in(file("Storage/Cassandra")) dependsOn(StorageBase, Exceptions, KamanjaUtils)
+lazy val StorageCassandra = project.in(file("Storage/Cassandra")) dependsOn(StorageBase, Serialize, Exceptions, KamanjaUtils, KvBase)
 
-// lazy val StorageHashMap = project.in(file("Storage/HashMap")) dependsOn(StorageBase, Exceptions, KamanjaUtils)
+lazy val StorageHashMap = project.in(file("Storage/HashMap")) dependsOn(StorageBase, Serialize, Exceptions, KamanjaUtils, KvBase)
 
-// lazy val StorageHBase = project.in(file("Storage/HBase")) dependsOn(StorageBase, Exceptions, KamanjaUtils)
+lazy val StorageHBase = project.in(file("Storage/HBase")) dependsOn(StorageBase, Serialize, Exceptions, KamanjaUtils, KvBase)
 
 // lazy val StorageRedis = project.in(file("Storage/Redis")) dependsOn(StorageBase, Exceptions, KamanjaUtils)
 
-// lazy val StorageTreeMap = project.in(file("Storage/TreeMap")) dependsOn(StorageBase, Exceptions, KamanjaUtils)
+lazy val StorageTreeMap = project.in(file("Storage/TreeMap")) dependsOn(StorageBase, Serialize, Exceptions, KamanjaUtils, KvBase)
 
 // lazy val StorageVoldemort = project.in(file("Storage/Voldemort")) dependsOn(StorageBase, Exceptions, KamanjaUtils)
 
 lazy val StorageSqlServer = project.in(file("Storage/SqlServer")) dependsOn(StorageBase, Serialize, Exceptions, KamanjaUtils)
 
-lazy val StorageManager = project.in(file("Storage/StorageManager")) dependsOn(StorageBase, Exceptions, KamanjaBase, KamanjaUtils, StorageSqlServer)
+// lazy val StorageMySql = project.in(file("Storage/MySql")) dependsOn(StorageBase, Serialize, Exceptions, KamanjaUtils)
+
+lazy val StorageManager = project.in(file("Storage/StorageManager")) dependsOn(StorageBase, Exceptions, KamanjaBase, KamanjaUtils, StorageSqlServer, StorageCassandra, StorageHashMap, StorageTreeMap, StorageHBase)
 
 lazy val AuditAdapterBase = project.in(file("AuditAdapters/AuditAdapterBase")) dependsOn(Exceptions)
 
@@ -131,3 +139,8 @@ lazy val KvBase = project.in(file("KvBase"))
 
 lazy val FileDataConsumer = project.in(file("FileDataConsumer")) dependsOn(Exceptions, MetadataAPI)
 
+lazy val SaveContainerDataComponent = project.in(file("Utils/SaveContainerDataComponent")) dependsOn (Metadata, KamanjaBase, MetadataBootstrap, MetadataAPI, StorageManager, Exceptions, TransactionService)
+
+lazy val UtilsForModels = project.in(file("Utils/UtilsForModels"))
+
+lazy val JarFactoryOfModelInstanceFactory = project.in(file("FactoriesOfModelInstanceFactory/JarFactoryOfModelInstanceFactory")) dependsOn (Metadata, KamanjaBase, Exceptions)

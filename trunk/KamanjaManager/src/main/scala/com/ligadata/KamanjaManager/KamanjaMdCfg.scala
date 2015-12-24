@@ -17,10 +17,10 @@
 
 package com.ligadata.KamanjaManager
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadata.MdMgr._
-import com.ligadata.KamanjaBase.{ EnvContext, ContainerNameAndDatastoreInfo }
+import com.ligadata.KamanjaBase.{ EnvContext, NodeContext, ContainerNameAndDatastoreInfo }
 import com.ligadata.InputOutputAdapterInfo.{ ExecContext, InputAdapter, OutputAdapter, ExecContextObj, PartitionUniqueRecordKey, PartitionUniqueRecordValue, InputAdapterCallerContext }
 import com.ligadata.Utils.{ Utils, KamanjaClassLoader, KamanjaLoaderInfo }
 import scala.collection.mutable.ArrayBuffer
@@ -31,16 +31,16 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.native.JsonMethods._
 import java.io.{ File }
-import com.ligadata.Exceptions.StackTrace
+import com.ligadata.Exceptions._
 
 class KamanjaInputAdapterCallerContext extends InputAdapterCallerContext {
   var outputAdapters: Array[OutputAdapter] = _
-  var envCtxt: EnvContext = _
+  var gNodeContext: NodeContext = _
 }
 
 // This is shared by multiple threads to read (because we are not locking). We create this only once at this moment while starting the manager
 object KamanjaMdCfg {
-  private[this] val LOG = Logger.getLogger(getClass);
+  private[this] val LOG = LogManager.getLogger(getClass);
   private[this] val mdMgr = GetMdMgr
 
   def InitConfigInfo: Boolean = {
@@ -74,6 +74,18 @@ object KamanjaMdCfg {
     if (zooKeeperInfo == null) {
       LOG.error("ZooKeeperInfo not found for Node %d  & ClusterId : %s".format(KamanjaConfiguration.nodeId, nd.ClusterId))
       return false
+    }
+
+    val adapterCommitTime = mdMgr.GetUserProperty(nd.ClusterId, "AdapterCommitTime")
+    if (adapterCommitTime != null && adapterCommitTime.trim.size > 0) {
+      try {
+        val tm = adapterCommitTime.trim().toInt
+        if (tm > 0)
+          KamanjaConfiguration.adapterInfoCommitTime = tm
+        LOG.debug("AdapterCommitTime: " + KamanjaConfiguration.adapterInfoCommitTime)
+      } catch {
+        case e: Exception => {}
+      }
     }
 
     KamanjaConfiguration.jarPaths = if (nd.JarPaths == null) Set[String]() else nd.JarPaths.map(str => str.replace("\"", "").trim).filter(str => str.size > 0).toSet
@@ -304,9 +316,33 @@ object KamanjaMdCfg {
           LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". ObjType0:" + objinst.getClass.getSimpleName + ". ObjType1:" + objinst.getClass.getCanonicalName)
         }
       } catch {
+        case e: FatalAdapterException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        }
+        case e: StorageConnectionException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        }
+        case e: StorageFetchException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        }
+        case e: StorageDMLException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        }
+        case e: StorageDDLException => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e.cause)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        }
         case e: Exception => {
-          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage)
-
+          val causeStackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
+        }
+        case e: Throwable => {
+          val causeStackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to instantiate Environment Context object for Class:" + className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nCause:\n" + causeStackTrace)
         }
       }
     } else {
@@ -356,13 +392,13 @@ object KamanjaMdCfg {
     // Get input adapter
     LOG.debug("Getting Input Adapters")
 
-    if (LoadInputAdapsForCfg(inputAdaps, inputAdapters, outputAdapters.toArray, KamanjaMetadata.envCtxt) == false)
+    if (LoadInputAdapsForCfg(inputAdaps, inputAdapters, outputAdapters.toArray, KamanjaMetadata.gNodeContext) == false)
       return false
 
     // Get input adapter
     LOG.debug("Getting Validate Input Adapters")
 
-    if (LoadValidateInputAdapsFromCfg(validateAdaps, validateInputAdapters, outputAdapters.toArray, KamanjaMetadata.envCtxt) == false)
+    if (LoadValidateInputAdapsFromCfg(validateAdaps, validateInputAdapters, outputAdapters.toArray, KamanjaMetadata.gNodeContext) == false)
       return false
 
     val totaltm = "TimeConsumed:%.02fms".format((System.nanoTime - s0) / 1000000.0);
@@ -383,8 +419,11 @@ object KamanjaMdCfg {
     }
 
     if (allJars != null) {
-      if (Utils.LoadJars(allJars.map(j => Utils.GetValidJarFile(KamanjaConfiguration.jarPaths, j)).toArray, KamanjaConfiguration.adaptersAndEnvCtxtLoader.loadedJars, KamanjaConfiguration.adaptersAndEnvCtxtLoader.loader) == false)
-        throw new Exception("Failed to add Jars")
+      if (Utils.LoadJars(allJars.map(j => Utils.GetValidJarFile(KamanjaConfiguration.jarPaths, j)).toArray, KamanjaConfiguration.adaptersAndEnvCtxtLoader.loadedJars, KamanjaConfiguration.adaptersAndEnvCtxtLoader.loader) == false) {
+        val szErrMsg = "Failed to load Jars:" + allJars.mkString(",")
+        LOG.error(szErrMsg)
+        throw new Exception(szErrMsg)
+      }
     }
 
     // Try for errors before we do real loading & processing
@@ -392,7 +431,15 @@ object KamanjaMdCfg {
       Class.forName(statusAdapterCfg.className, true, KamanjaConfiguration.adaptersAndEnvCtxtLoader.loader)
     } catch {
       case e: Exception => {
-        LOG.error("Failed to load Status/Output Adapter %s with class %s with Reason:%s Message:%s".format(statusAdapterCfg.Name, statusAdapterCfg.className, e.getCause, e.getMessage))
+        val szErrMsg = "Failed to load Status/Output Adapter %s with class %s with Reason:%s Message:%s".format(statusAdapterCfg.Name, statusAdapterCfg.className, e.getCause, e.getMessage)
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.error(szErrMsg + "\nStackTrace:" + stackTrace)
+        return null
+      }
+      case e: Throwable => {
+        val szErrMsg = "Failed to load Status/Output Adapter %s with class %s with Reason:%s Message:%s".format(statusAdapterCfg.Name, statusAdapterCfg.className, e.getCause, e.getMessage)
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.error(szErrMsg + "\nStackTrace:" + stackTrace)
         return null
       }
     }
@@ -421,15 +468,20 @@ object KamanjaMdCfg {
           LOG.info("Created Output Adapter for Name:" + statusAdapterCfg.Name + ", Class:" + statusAdapterCfg.className)
           return adapter
         } else {
-          LOG.error("Failed to instantiate output adapter object:" + statusAdapterCfg.className)
+          LOG.error("Failed to instantiate output/status adapter object:" + statusAdapterCfg.className)
         }
       } catch {
         case e: Exception => {
-          LOG.error("Failed to instantiate output adapter object:" + statusAdapterCfg.className + ". Reason:" + e.getCause + ". Message:" + e.getMessage)
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to instantiate output/status adapter object:" + statusAdapterCfg.className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nStackTrace:" + stackTrace)
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to instantiate output/status adapter object:" + statusAdapterCfg.className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nStackTrace:" + stackTrace)
         }
       }
     } else {
-      LOG.error("Failed to instantiate output adapter object:" + statusAdapterCfg.className)
+      LOG.error("Failed to instantiate output/status adapter object:" + statusAdapterCfg.className)
     }
     null
   }
@@ -463,6 +515,11 @@ object KamanjaMdCfg {
           LOG.error("Failed to get output adapter for %s. Reason:%s Message:%s".format(ac, e.getCause, e.getMessage))
           return false
         }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to get output adapter for %s. Reason:%s Message:%s\nStackTrace:%s".format(ac, e.getCause, e.getMessage, stackTrace))
+          return false
+        }
       }
     })
     return true
@@ -490,7 +547,13 @@ object KamanjaMdCfg {
       Class.forName(statusAdapterCfg.className, true, KamanjaConfiguration.adaptersAndEnvCtxtLoader.loader)
     } catch {
       case e: Exception => {
-        LOG.error("Failed to load Validate/Input Adapter %s with class %s with Reason:%s Message:%s".format(statusAdapterCfg.Name, statusAdapterCfg.className, e.getCause, e.getMessage))
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.error("Failed to load Validate/Input Adapter %s with class %s with Reason:%s Message:%s\nStackTrace:%s".format(statusAdapterCfg.Name, statusAdapterCfg.className, e.getCause, e.getMessage, stackTrace))
+        return null
+      }
+      case e: Throwable => {
+        val stackTrace = StackTrace.ThrowableTraceString(e)
+        LOG.error("Failed to load Validate/Input Adapter %s with class %s with Reason:%s Message:%s\nStackTrace:%s".format(statusAdapterCfg.Name, statusAdapterCfg.className, e.getCause, e.getMessage, stackTrace))
         return null
       }
     }
@@ -523,7 +586,12 @@ object KamanjaMdCfg {
         }
       } catch {
         case e: Exception => {
-          LOG.error("Failed to instantiate input adapter object:" + statusAdapterCfg.className + ". Reason:" + e.getCause + ". Message:" + e.getMessage)
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to instantiate input adapter object:" + statusAdapterCfg.className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nStackTrace:" + stackTrace)
+        }
+        case e: Throwable => {
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to instantiate input adapter object:" + statusAdapterCfg.className + ". Reason:" + e.getCause + ". Message:" + e.getMessage + "\nStackTrace:" + stackTrace)
         }
       }
     } else {
@@ -532,7 +600,7 @@ object KamanjaMdCfg {
     null
   }
 
-  private def PrepInputAdapsForCfg(adaps: scala.collection.mutable.Map[String, AdapterInfo], inputAdapters: ArrayBuffer[InputAdapter], outputAdapters: Array[OutputAdapter], envCtxt: EnvContext, execCtxtObj: ExecContextObj): Boolean = {
+  private def PrepInputAdapsForCfg(adaps: scala.collection.mutable.Map[String, AdapterInfo], inputAdapters: ArrayBuffer[InputAdapter], outputAdapters: Array[OutputAdapter], gNodeContext: NodeContext, execCtxtObj: ExecContextObj): Boolean = {
     // ConfigurationName
     if (adaps.size == 0) {
       return true
@@ -540,7 +608,7 @@ object KamanjaMdCfg {
 
     val callerCtxt = new KamanjaInputAdapterCallerContext
     callerCtxt.outputAdapters = outputAdapters
-    callerCtxt.envCtxt = envCtxt
+    callerCtxt.gNodeContext = gNodeContext
 
     adaps.foreach(ac => {
       //BUGBUG:: Not yet validating required fields 
@@ -565,7 +633,8 @@ object KamanjaMdCfg {
         inputAdapters += adapter
       } catch {
         case e: Exception => {
-          LOG.error("Failed to get input adapter for %s. Reason:%s Message:%s".format(ac, e.getCause, e.getMessage))
+          val stackTrace = StackTrace.ThrowableTraceString(e)
+          LOG.error("Failed to get input adapter for %s. Reason:%s Message:%s\nStackTrace:%s".format(ac, e.getCause, e.getMessage, stackTrace))
           return false
         }
       }
@@ -573,11 +642,11 @@ object KamanjaMdCfg {
     return true
   }
 
-  private def LoadInputAdapsForCfg(adaps: scala.collection.mutable.Map[String, AdapterInfo], inputAdapters: ArrayBuffer[InputAdapter], outputAdapters: Array[OutputAdapter], envCtxt: EnvContext): Boolean = {
-    return PrepInputAdapsForCfg(adaps, inputAdapters, outputAdapters, envCtxt, ExecContextObjImpl)
+  private def LoadInputAdapsForCfg(adaps: scala.collection.mutable.Map[String, AdapterInfo], inputAdapters: ArrayBuffer[InputAdapter], outputAdapters: Array[OutputAdapter], gNodeContext: NodeContext): Boolean = {
+    return PrepInputAdapsForCfg(adaps, inputAdapters, outputAdapters, gNodeContext, ExecContextObjImpl)
   }
 
-  private def LoadValidateInputAdapsFromCfg(validate_adaps: scala.collection.mutable.Map[String, AdapterInfo], valInputAdapters: ArrayBuffer[InputAdapter], outputAdapters: Array[OutputAdapter], envCtxt: EnvContext): Boolean = {
+  private def LoadValidateInputAdapsFromCfg(validate_adaps: scala.collection.mutable.Map[String, AdapterInfo], valInputAdapters: ArrayBuffer[InputAdapter], outputAdapters: Array[OutputAdapter], gNodeContext: NodeContext): Boolean = {
     val validateInputAdapters = scala.collection.mutable.Map[String, AdapterInfo]()
 
     outputAdapters.foreach(oa => {
@@ -595,7 +664,7 @@ object KamanjaMdCfg {
     })
     if (validateInputAdapters.size == 0)
       return true
-    return PrepInputAdapsForCfg(validateInputAdapters, valInputAdapters, outputAdapters, envCtxt, ValidateExecContextObjImpl)
+    return PrepInputAdapsForCfg(validateInputAdapters, valInputAdapters, outputAdapters, gNodeContext, ValidateExecContextObjImpl)
   }
 
 }

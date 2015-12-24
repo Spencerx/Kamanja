@@ -24,7 +24,7 @@ import com.datastax.driver.core.ResultSet
 import com.datastax.driver.core.ConsistencyLevel
 import com.datastax.driver.core.BatchStatement
 import java.nio.ByteBuffer
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.Exceptions._
 import com.ligadata.Exceptions.StackTrace
 
@@ -60,7 +60,7 @@ class KeyValueCassandraTx(owner: DataStore) extends Transaction {
 
 class KeyValueCassandra(parameter: PropertyMap) extends DataStore {
   val loggerName = this.getClass.getName
-  val logger = Logger.getLogger(loggerName)
+  val logger = LogManager.getLogger(loggerName)
 
   // Read all cassandra parameters
   var hostnames = parameter.getOrElse("hostlist", "localhost");

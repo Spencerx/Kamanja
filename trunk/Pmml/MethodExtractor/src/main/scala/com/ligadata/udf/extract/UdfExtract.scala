@@ -28,7 +28,7 @@ import java.io.BufferedWriter
 import java.io.FileWriter
 import java.io.File
 import java.io.PrintWriter
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{ Logger, LogManager }
 import com.ligadata.pmml.udfs._
 import com.ligadata.kamanja.metadata._
 import scala.util.parsing.json.JSON
@@ -72,7 +72,7 @@ import com.ligadata.Exceptions.StackTrace
 
 object UdfExtractGlobalLogger {
     val loggerName = this.getClass.getName()
-    val logger = Logger.getLogger(loggerName)
+    val logger = LogManager.getLogger(loggerName)
 }
 
 trait LogTrait {

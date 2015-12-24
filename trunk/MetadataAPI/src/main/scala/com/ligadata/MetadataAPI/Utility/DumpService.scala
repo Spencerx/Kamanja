@@ -17,7 +17,7 @@
 package com.ligadata.MetadataAPI.Utility
 
 import com.ligadata.MetadataAPI.MetadataAPIImpl
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import com.ligadata.kamanja.metadata.MdMgr
 /**
  * Created by dhaval on 8/13/15.
@@ -25,7 +25,7 @@ import com.ligadata.kamanja.metadata.MdMgr
 object DumpService {
   private val userid: Option[String] = Some("metadataapi")
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   def dumpMetadata: String ={
     var response=""

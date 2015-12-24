@@ -21,47 +21,40 @@ import com.ligadata.KamanjaBase.*;
 import com.ligadata.KamanjaBase.api.java.function.Function1;
 import com.ligadata.messagescontainers.System.*;
 import org.joda.time.*;
+import com.ligadata.kamanja.metadata.ModelDef;
 
 import java.lang.reflect.Array;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-public class COPDRiskAssessment extends ModelBase {
-    public COPDRiskAssessment(ModelContext mdlContext) {
-        super(mdlContext, objSingleton);
-        this.mdlContext = mdlContext;
-        init();
+public class COPDRiskAssessment extends ModelInstance {
+    public COPDRiskAssessment(ModelInstanceFactory factory) {
+        super(factory);
     }
 
-    @Override
-    public ModelContext modelContext() {
-        return mdlContext;
-    }
+    public static class COPDRiskAssessmentFactory extends ModelInstanceFactory {
+		public COPDRiskAssessmentFactory(ModelDef modelDef, NodeContext nodeContext) {
+			super(modelDef, nodeContext);
+		}
 
-    @Override
-    public ModelBaseObj factory() {
-        return objSingleton;
-    }
-
-    public static class COPDRiskAssessmentObj implements ModelBaseObj {
-        public boolean IsValidMessage(MessageContainerBase msg) {
+        public boolean isValidMessage(MessageContainerBase msg) {
             return (msg instanceof Beneficiary);
         }
 
-        public ModelBase CreateNewModel(ModelContext mdlContext) {
-            return new COPDRiskAssessment(mdlContext);
+        public ModelInstance createModelInstance() {
+            return new COPDRiskAssessment(this);
         }
 
-        public String ModelName() {
+        public String getModelName() {
             return "COPDRiskAssessment";
         }
 
-        public String Version() {
+        public String getVersion() {
             return "0.0.3";
         }
 
-        public ModelResultBase CreateResultObject() {
+        public ModelResultBase createResultObject() {
             return new MappedModelResults();
         }
 
@@ -87,7 +80,6 @@ public class COPDRiskAssessment extends ModelBase {
     }
 
     private Beneficiary msg = null;
-    private ModelContext mdlContext = null;
 
     // Filtered Message Arrays
     private ArrayList<InpatientClaim> inpatientClaimHistory = new ArrayList<>();
@@ -103,8 +95,8 @@ public class COPDRiskAssessment extends ModelBase {
 
     private SimpleDateFormat yearMonthDayHourFormat = new SimpleDateFormat("yyyyMMdd");
 
-    private void init() {
-        msg = (Beneficiary) this.modelContext().msg();
+    private void init(TransactionContext txnCtxt) {
+        msg = (Beneficiary) txnCtxt.getMessage();
         System.out.println("Executing COPD Risk Assessment against Beneficiary message:");
         System.out.println("\tMessage Name: " + msg.Name());
         System.out.println("\tMessage Version: " + msg.Version());
@@ -167,8 +159,6 @@ public class COPDRiskAssessment extends ModelBase {
         Date oneYearAgo = calendar.getTime();
         return ((tDate.before(today) || tDate.equals(today)) && (tDate.after(oneYearAgo) || tDate.equals(oneYearAgo)));
     }
-
-    static COPDRiskAssessmentObj objSingleton = new COPDRiskAssessmentObj();
 
     private Boolean age40OrOlder() {
         org.joda.time.LocalDate birthdate = new org.joda.time.LocalDate(msg.bene_birth_dt() / 10000, (msg.bene_birth_dt() % 1000) / 100, msg.bene_birth_dt() % 100);
@@ -398,13 +388,14 @@ public class COPDRiskAssessment extends ModelBase {
         }
         System.out.println("******************************************************************************");
 
-        return ((MappedModelResults) new COPDRiskAssessmentObj().CreateResultObject()).withResults(results);
+        return ((MappedModelResults) factory().createResultObject()).withResults(results);
     }
 
     @Override
-    public MappedModelResults execute(boolean emitAllResults) {
+    public MappedModelResults execute(TransactionContext txnCtxt, boolean outputDefault) {
+        init(txnCtxt);
         MappedModelResults result = copdRiskLevel();
-        if(!emitAllResults) {
+        if(!outputDefault) {
             if (result.get("COPD Risk Level") == "") {
                 return null;
             }

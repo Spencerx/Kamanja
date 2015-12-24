@@ -26,7 +26,7 @@ import com.ligadata.StorageBase.{ DataStore, Transaction }
 import com.ligadata.kamanja.metadata._
 import com.ligadata.kamanja.metadataload.MetadataLoad
 import com.twitter.chill.ScalaKryoInstantiator
-import org.apache.log4j._
+import org.apache.logging.log4j._
 import org.apache.zookeeper.CreateMode
 import org.scalatest.Assertions._
 
@@ -44,7 +44,7 @@ object TestMetadataAPI {
   private val userid: Option[String] = Some("someUser")
 
   val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
+  lazy val logger = LogManager.getLogger(loggerName)
 
   var serializer = SerializerManager.GetSerializer("kryo")
 
@@ -168,7 +168,7 @@ object TestMetadataAPI {
 
   def RemoveType {
     val loggerName = this.getClass.getName
-    lazy val logger = Logger.getLogger(loggerName)
+    lazy val logger = LogManager.getLogger(loggerName)
 
     try {
       // logger.setLevel(Level.TRACE); //check again
@@ -271,7 +271,7 @@ object TestMetadataAPI {
 
   def RemoveFunction: Unit = {
     val loggerName = this.getClass.getName
-    lazy val logger = Logger.getLogger(loggerName)
+    lazy val logger = LogManager.getLogger(loggerName)
 
     try {
       //logger.setLevel(Level.TRACE);
@@ -314,7 +314,7 @@ object TestMetadataAPI {
 
   def GetFunction: Unit = {
     val loggerName = this.getClass.getName
-    lazy val logger = Logger.getLogger(loggerName)
+    lazy val logger = LogManager.getLogger(loggerName)
 
     try {
       //logger.setLevel(Level.TRACE)
@@ -536,7 +536,7 @@ object TestMetadataAPI {
 
   def GetModel {
     val loggerName = this.getClass.getName
-    lazy val logger = Logger.getLogger(loggerName)
+    lazy val logger = LogManager.getLogger(loggerName)
 
     try {
       //  logger.setLevel(Level.TRACE); //check again
@@ -576,7 +576,7 @@ object TestMetadataAPI {
 
   def GetModelFromCache {
     val loggerName = this.getClass.getName
-    lazy val logger = Logger.getLogger(loggerName)
+    lazy val logger = LogManager.getLogger(loggerName)
 
     try {
       //    logger.setLevel(Level.TRACE); //check again
